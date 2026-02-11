@@ -1,0 +1,35 @@
+# n8n Automation Server
+# Not publicly exposed — access via SSH tunnel:
+#   ssh -L 5678:localhost:5678 your-server
+#   Then open http://localhost:5678
+#
+# Usage:
+#   docker compose up -d
+
+services:
+  n8n:
+    image: n8nio/n8n:1.123.20
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${N8N_PORT:-5678}:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workflows:/home/node/workflows
+    environment:
+      - N8N_SECURE_COOKIE=${N8N_SECURE_COOKIE:-false}
+      - DB_SQLITE_POOL_SIZE=${DB_SQLITE_POOL_SIZE:-2}
+      - DB_SQLITE_VACUUM_ON_STARTUP=${DB_SQLITE_VACUUM_ON_STARTUP:-false}
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-Europe/Zagreb}
+      - TZ=${TZ:-Europe/Zagreb}
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1536M
+        reservations:
+          cpus: "0.25"
+          memory: 384M
+
+volumes:
+  n8n_data:
