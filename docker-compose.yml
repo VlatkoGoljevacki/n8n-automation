@@ -19,9 +19,13 @@ services:
     environment:
       - N8N_SECURE_COOKIE=${N8N_SECURE_COOKIE:-false}
       - DB_SQLITE_POOL_SIZE=${DB_SQLITE_POOL_SIZE:-2}
-      - DB_SQLITE_VACUUM_ON_STARTUP=${DB_SQLITE_VACUUM_ON_STARTUP:-false}
+      - DB_SQLITE_VACUUM_ON_STARTUP=${DB_SQLITE_VACUUM_ON_STARTUP:-true}
       - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-Europe/Zagreb}
       - TZ=${TZ:-Europe/Zagreb}
+      - N8N_RUNNERS_ENABLED=true
+      - N8N_RUNNERS_MODE=external
+      - N8N_RUNNERS_BROKER_LISTEN_ADDRESS=0.0.0.0
+      - N8N_RUNNERS_AUTH_TOKEN=${N8N_RUNNERS_AUTH_TOKEN}
     deploy:
       resources:
         limits:
@@ -30,6 +34,26 @@ services:
         reservations:
           cpus: "0.25"
           memory: 384M
+
+  n8n-runner:
+    image: n8nio/runners:latest
+    container_name: n8n-runner
+    restart: unless-stopped
+    environment:
+      - N8N_RUNNERS_TASK_BROKER_URI=http://n8n:5679
+      - N8N_RUNNERS_AUTH_TOKEN=${N8N_RUNNERS_AUTH_TOKEN}
+      - N8N_RUNNERS_RUNNER_TYPE=javascript
+      - NODE_OPTIONS=--max-old-space-size=512
+    depends_on:
+      - n8n
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
 
 volumes:
   n8n_data:
