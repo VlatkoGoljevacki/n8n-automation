@@ -8,7 +8,7 @@
 
 services:
   n8n:
-    image: n8nio/n8n:1.123.20
+    image: n8nio/n8n:latest
     container_name: n8n
     restart: unless-stopped
     ports:
