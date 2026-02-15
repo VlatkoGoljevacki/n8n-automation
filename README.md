@@ -115,3 +115,29 @@ To restore:
 ```bash
 docker run --rm -v n8n_data:/data -v $(pwd):/backup alpine tar xzf /backup/n8n_backup.tar.gz -C /data
 ```
+
+## Workflow Design Checklist
+
+Common pitfalls and best practices discovered while building workflows. Refer to this when creating new workflows or debugging existing ones.
+
+### HTTP Request Nodes
+
+- **Use the correct HTTP method.** Geocoding and similar lookup APIs are GET, not POST. Sending the wrong method may still work when using query parameters but is incorrect and may break with API updates.
+- **Pass API keys via headers, not query parameters.** Query params end up in server logs, browser history, and URL-based monitoring. Use the appropriate auth header (e.g. `X-Goog-Api-Key` for Google APIs).
+- **Use variables you define.** If a Set node declares a parameter like `radius`, reference it in downstream nodes (`{{ $('Edit Fields').item.json.radius }}`) instead of hardcoding the value in the JSON body. Otherwise the Set node creates a false sense of configurability.
+
+### Location and Geo Queries
+
+- **Match radius to search area.** A 1 km radius from a centroid will miss most of a large region. Either use a radius that covers the area, use `locationRestriction` with a bounding rectangle, or omit location bias when the text query already contains the location name.
+- **Understand bias vs restriction.** `locationBias` prefers results near a point but can return results anywhere. `locationRestriction` strictly limits results to the defined area. Choose based on intent.
+
+### Pagination
+
+- **Avoid duplicating the entire flow for pagination.** The first-page path and subsequent-page path often end up as near-identical node chains. Where possible, structure the workflow so the same nodes handle both first and subsequent pages.
+- **Add a delay between paginated API calls.** Use a Wait node to avoid hitting rate limits on external APIs.
+- **Don't read an entire sheet to count rows.** Maintain a running counter (in a DataTable or variable) instead of fetching all rows from Google Sheets and counting them. The sheet-read approach slows down as data grows.
+
+### Environment Variables
+
+- **Store secrets in `.env`, not in workflow nodes.** API keys and credentials belong in environment variables. Reference them with `{{ $env.VAR_NAME }}`.
+- **Use n8n Variables for non-sensitive config.** Settings > Variables lets you manage key-value pairs from the UI, accessible via `{{ $vars.VAR_NAME }}`. Good for spreadsheet IDs, sheet names, and other config that changes between environments.

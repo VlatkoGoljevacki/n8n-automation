@@ -1,0 +1,1149 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "ee54be47-713e-4565-9fac-1d1698866cc3",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "69e789cd-3a03-4c8b-807a-6a3d7310d579",
+              "name": "Google_Places_API",
+              "value": "={{ $env.PLACES_API }}",
+              "type": "string"
+            },
+            {
+              "id": "24b29221-42b4-4c3a-aac4-ceb360726c8d",
+              "name": "query",
+              "value": "hotels, Licko-Senjska županija",
+              "type": "string"
+            },
+            {
+              "id": "f3433523-c5dc-4795-a739-0eef23b6ad2b",
+              "name": "radius",
+              "value": "1000",
+              "type": "string"
+            },
+            {
+              "id": "4a9e178f-5c8c-49ca-9e25-325b0ed22ad8",
+              "name": "location",
+              "value": "Licko-Senjska Zupanija",
+              "type": "string"
+            },
+            {
+              "id": "d2bde3f3-cd17-4445-b66f-03548acf4a19",
+              "name": "spreadsheet_id",
+              "value": "1h5rvDIU1b9sPLXn80fH_wQJrZ1mh9PhBeFOVq0XZzOg",
+              "type": "string"
+            },
+            {
+              "id": "8ee11f4e-e9b8-490b-a560-1c313ef03a2d",
+              "name": "sheet_name",
+              "value": "Sheet1",
+              "type": "string"
+            },
+            {
+              "id": "07cefbd8-76c2-4afa-b472-0b05e90dfa69",
+              "name": "max_items",
+              "value": "100",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "157d9190-edee-4551-a4bb-c1666b2377cc",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://maps.googleapis.com/maps/api/geocode/json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "address",
+              "value": "={{ $json.location }}"
+            },
+            {
+              "name": "key",
+              "value": "={{ $json.Google_Places_API }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "0a2d68d0-78ec-4dab-b33d-3c929b415298",
+      "name": "Coordinates"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://places.googleapis.com/v1/places:searchText",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $('Edit Fields').item.json.Google_Places_API }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Goog-FieldMask",
+              "value": "places.displayName,places.formattedAddress,nextPageToken"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"textQuery\": \"{{ $('Edit Fields').item.json.query }}\",\n  \"locationBias\": {\n    \"circle\": {\n      \"center\": {\n        \"latitude\": {{ $json.results[0].geometry.location.lat }},\n        \"longitude\": {{ $json.results[0].geometry.location.lng }}\n      },\n      \"radius\": 1000.0\n    }\n  },\n  \"pageSize\": 20\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        656,
+        0
+      ],
+      "id": "92dfeee4-a3dc-4fad-abd9-36de56334b16",
+      "name": "Places"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "places",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        864,
+        0
+      ],
+      "id": "3c84a533-bbb8-4007-97df-6e8350d9dbf7",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Edit Fields').item.json.spreadsheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Edit Fields').item.json.sheet_name }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Business Name": "={{ $json.displayName.text }}",
+            "Address": "={{ $json.formattedAddress }}"
+          },
+          "matchingColumns": [
+            "Business Name"
+          ],
+          "schema": [
+            {
+              "id": "Business Name",
+              "displayName": "Business Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Address",
+              "displayName": "Address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1072,
+        0
+      ],
+      "id": "892e93ff-ee00-454c-9267-ad2b85db376e",
+      "name": "Append or update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "5SbpS5gyKYjz6w4R",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "TjCsxRaaWDiuJTCi",
+          "mode": "list",
+          "cachedResultName": "leads-vars",
+          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/TjCsxRaaWDiuJTCi"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "NextPageToken": "={{ $('Places').item.json.nextPageToken }}"
+          },
+          "matchingColumns": [
+            "NextPageToken"
+          ],
+          "schema": [
+            {
+              "id": "NextPageToken",
+              "displayName": "NextPageToken",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1536,
+        0
+      ],
+      "id": "ac45b324-89e7-43b0-94d6-69023f6769e5",
+      "name": "Insert row"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cec1d2e6-3ce3-4da8-b7aa-47e8e66a7548",
+              "leftValue": "={{ $json.NextPageToken }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1728,
+        0
+      ],
+      "id": "188ee594-2137-4cee-890d-eceb73459ee4",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "Business Name"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1328,
+        0
+      ],
+      "id": "bb8aa37f-816c-43b8-9a11-3f8cef6658de",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        560,
+        256
+      ],
+      "id": "7b577e4e-06e8-403d-9255-e362321cb64c",
+      "name": "Wait",
+      "webhookId": "c7d73186-c0a3-4e44-a4cf-639e3f1ddf0f"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "TjCsxRaaWDiuJTCi",
+          "mode": "list",
+          "cachedResultName": "leads-vars",
+          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/TjCsxRaaWDiuJTCi"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyValue": "={{ $('Insert row').item.json.id }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        768,
+        256
+      ],
+      "id": "7ce46f0d-c8bd-4d60-82d7-11960b65bf59",
+      "name": "Get row(s)"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://places.googleapis.com/v1/places:searchText",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $('Edit Fields').item.json.Google_Places_API }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Goog-FieldMask",
+              "value": "places.displayName,places.formattedAddress,nextPageToken"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"textQuery\": \"{{ $('Edit Fields').item.json.query }}\",\n  \"locationBias\": {\n    \"circle\": {\n      \"center\": {\n        \"latitude\": {{ $('Coordinates').item.json.results[0].geometry.location.lat }},\n        \"longitude\": {{ $('Coordinates').item.json.results[0].geometry.location.lng }}\n      },\n      \"radius\": 1000.0\n    }\n  },\n  \"pageSize\": 20,\n  \"pageToken\": \"{{ $json.NextPageToken }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        960,
+        256
+      ],
+      "id": "1d96cddb-3122-4ad2-b4e7-cd021807bbff",
+      "name": "Places1"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "places",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1216,
+        256
+      ],
+      "id": "54071934-19ce-4916-9567-95a641dfa67b",
+      "name": "Split Out1"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Edit Fields').item.json.spreadsheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Edit Fields').item.json.sheet_name }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Business Name": "={{ $json.displayName.text }}",
+            "Address": "={{ $json.formattedAddress }}"
+          },
+          "matchingColumns": [
+            "Business Name"
+          ],
+          "schema": [
+            {
+              "id": "Business Name",
+              "displayName": "Business Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Address",
+              "displayName": "Address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1408,
+        256
+      ],
+      "id": "e89ffa2c-d0a7-4ecd-b2f0-039aff22026c",
+      "name": "Append or update row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "5SbpS5gyKYjz6w4R",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "Business Name"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1632,
+        256
+      ],
+      "id": "49e932e4-300c-427a-bd2b-7f678b2222d2",
+      "name": "Aggregate1"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "TjCsxRaaWDiuJTCi",
+          "mode": "list",
+          "cachedResultName": "leads-vars",
+          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/TjCsxRaaWDiuJTCi"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyValue": "={{ $('Insert row').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "NextPageToken": "={{ $('Places1').first().json.nextPageToken }}"
+          },
+          "matchingColumns": [
+            "NextPageToken"
+          ],
+          "schema": [
+            {
+              "id": "NextPageToken",
+              "displayName": "NextPageToken",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1872,
+        272
+      ],
+      "id": "e4705f3b-01eb-4504-928c-e42b8a42e3c6",
+      "name": "Update row(s)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cec1d2e6-3ce3-4da8-b7aa-47e8e66a7548",
+              "leftValue": "={{ $json.NextPageToken }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2112,
+        272
+      ],
+      "id": "21230963-31da-477f-aace-fed9d6642175",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Edit Fields').item.json.spreadsheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Edit Fields').item.json.sheet_name }}",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1296,
+        592
+      ],
+      "id": "a9fc9f31-4848-43d3-a1d1-97db9df2cedb",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "5SbpS5gyKYjz6w4R",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "Business Name"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1536,
+        592
+      ],
+      "id": "a6ce82c3-0dc2-48e1-9b43-4bed8f5cb47b",
+      "name": "Aggregate2"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cca090c4-93e9-4155-9922-1665706760fc",
+              "name": "max_items",
+              "value": "={{ $json['Business Name'].length }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        592
+      ],
+      "id": "e75a39a9-cc45-4157-a7eb-869bb20e789f",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cec1d2e6-3ce3-4da8-b7aa-47e8e66a7548",
+              "leftValue": "={{ $json.max_items }}",
+              "rightValue": 100,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2016,
+        592
+      ],
+      "id": "a938e4af-a251-4c13-b1e4-e566e5a30e6b",
+      "name": "If2"
+    }
+  ],
+  "pinData": {
+    "Places": [
+      {
+        "json": {
+          "places": [
+            {
+              "formattedAddress": "Sunčani put, 53291, Novalja, Croatia",
+              "displayName": {
+                "text": "Hotel Kaneo",
+                "languageCode": "en"
+              }
+            },
+            {
+              "formattedAddress": "Trg Loza 1, 53291, Novalja, Croatia",
+              "displayName": {
+                "text": "Loža",
+                "languageCode": "hr"
+              }
+            },
+            {
+              "formattedAddress": "Obala dr. Franje Tuđmana 8, 53270, Senj, Croatia",
+              "displayName": {
+                "text": "Hotel Bura/45N",
+                "languageCode": "en"
+              }
+            },
+            {
+              "formattedAddress": "Abatovo ul. 11, 53270, Senj, Croatia",
+              "displayName": {
+                "text": "BC Eleven",
+                "languageCode": "de"
+              }
+            },
+            {
+              "formattedAddress": "Licko Petrovo Selo 52, 53233, Ličko Petrovo Selo, Croatia",
+              "displayName": {
+                "text": "Lyra Hotel Plitvice",
+                "languageCode": "en"
+              }
+            },
+            {
+              "formattedAddress": "D405 48, 53287, Jablanac, Croatia",
+              "displayName": {
+                "text": "Hotel Kul IN Ablana",
+                "languageCode": "de"
+              }
+            },
+            {
+              "formattedAddress": "Vrelo Koreničko 36/2, 53230, Korenica, Croatia",
+              "displayName": {
+                "text": "Pansion Izvor",
+                "languageCode": "en"
+              }
+            },
+            {
+              "formattedAddress": "Ličko lešće 315, 53220, Ličko Lešće, Croatia",
+              "displayName": {
+                "text": "Hotel Gacka",
+                "languageCode": "en"
+              }
+            },
+            {
+              "formattedAddress": "Jezerce, 53231, Plitvička Jezera, Croatia",
+              "displayName": {
+                "text": "Villa Katja",
+                "languageCode": "en"
+              }
+            },
+            {
+              "formattedAddress": "Josipa Jovića 19, 53231, Plitvička Jezera, Croatia",
+              "displayName": {
+                "text": "Hotel Jezero",
+                "languageCode": "en"
+              }
+            },
+            {
+              "formattedAddress": "Burin Bok b.b, 53291, Novalja, Croatia",
+              "displayName": {
+                "text": "Hotel Olea",
+                "languageCode": "en"
+              }
+            },
+            {
+              "formattedAddress": "66, 53231, Plitvica Selo, Croatia",
+              "displayName": {
+                "text": "Lakeside Hotel Plitvice",
+                "languageCode": "sk"
+              }
+            },
+            {
+              "formattedAddress": "Donji Babin Potok 106, 53223, Donji Babin Potok, Croatia",
+              "displayName": {
+                "text": "Guest House Goodnight",
+                "languageCode": "en"
+              }
+            },
+            {
+              "formattedAddress": "Plitvica selo 51, 53230, Plitvica Selo, Croatia",
+              "displayName": {
+                "text": "Country house Plitvice",
+                "languageCode": "en"
+              }
+            },
+            {
+              "formattedAddress": "cuica krcevina 30, 53231, Jezerce, Croatia",
+              "displayName": {
+                "text": "Plitvice Inn",
+                "languageCode": "en"
+              }
+            },
+            {
+              "formattedAddress": "Jadranski put 17, 53291, Novalja, Croatia",
+              "displayName": {
+                "text": "Joel Hotel",
+                "languageCode": "hr"
+              }
+            },
+            {
+              "formattedAddress": "Burin Bok 16, 53291, Novalja, Croatia",
+              "displayName": {
+                "text": "Pansion Comfort Bok",
+                "languageCode": "en"
+              }
+            },
+            {
+              "formattedAddress": "Smoljanac 68/1, 53231, Plitvička Jezera, Croatia",
+              "displayName": {
+                "text": "Rooms Ruža",
+                "languageCode": "hr"
+              }
+            },
+            {
+              "formattedAddress": "Vrelo Koreničko 3, 53230, Korenica, Croatia",
+              "displayName": {
+                "text": "Pansion Mrzlin Grad",
+                "languageCode": "en"
+              }
+            },
+            {
+              "formattedAddress": "Mukinje 27, 53231, Plitvička Jezera, Croatia",
+              "displayName": {
+                "text": "Eva Luxury Rooms & Apartments",
+                "languageCode": "en"
+              }
+            }
+          ],
+          "nextPageToken": "AcnlKN3uglOp_jbQl-kY4jg5tBsKBbw8kIYEzSKIilmp_-Lx8QYJy1_SKbVwb3jXfAIUeTl-t3MQNJpfBqPbvn7BN4sm9yr24gc9kjgrWGz3I4OKn3Lw9fKEsM4uRxwL5sTIhm_PCOMQ3aDyayXM4_WFBsu6vJUMgeotCVr9V4eUFFNdZnupFAQ-URhWCAsTkT9sUurdNjGZ66rp-KhstnPtXWA7u8uVS70zWwo7DS8YUbUELCGQj7-tAwDD2B-OYUAA_CT3-MAPXzuUpbic6paiUAxwCH8yRWNnazzCdKmgCvdogSu5dQhFuTg-nijMlK4DeKkKiOA3E4a68HjYB0Pv33UdtXj_ab5vGCvn5uIJ0GRurecEfdPHCVWz1z02wfSc2Lv4tZMjbxLifMVnvcYqFuFMZ38W3fw5UQkvExH172APtURcFqwUMh0EIoW7SVuAezLycQOtKG_OJLZhApCTAKGRstS8dIlVVBiEWym53y1yjjWKW48Tri_MPRP4JGHm8pUYAi_cnWJxwnS_ofdGMitBCC8Zqc_OzAeIrY8rUtGkpU0HAR3UBmExpRw8cajubfkVCxi7QWOrQCm8klp91zUj_WEdifS8rjLjr51cUnZ1QYXnQvTTY8Ou2etM9R_Aph4zwqstTDwaxMtjDTxw34Uc1YF15HT5TTFSz9aCx8xuTxIynQ9fvpNgBjVqOpQIMOVwXcjHjLwynjLTnq1vMJEzgbHGiReOQYZ437CPf-exnnnfQYAih9Ju-9sbtXUhclRNLSdW_HBcav7WAcCPG1qweA39gfWeFMpDVaURbErsxnaHnbuxtTIQP6gOFo2k37Ik-u5SMsY"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ],
+    "Coordinates": [
+      {
+        "json": {
+          "results": [
+            {
+              "address_components": [
+                {
+                  "long_name": "Lika-Senj County",
+                  "short_name": "Lika-Senj County",
+                  "types": [
+                    "administrative_area_level_1",
+                    "political"
+                  ]
+                },
+                {
+                  "long_name": "Croatia",
+                  "short_name": "HR",
+                  "types": [
+                    "country",
+                    "political"
+                  ]
+                }
+              ],
+              "formatted_address": "Lika-Senj County, Croatia",
+              "geometry": {
+                "bounds": {
+                  "northeast": {
+                    "lat": 45.12303499999999,
+                    "lng": 16.1410742
+                  },
+                  "southwest": {
+                    "lat": 44.2712142,
+                    "lng": 14.6828622
+                  }
+                },
+                "location": {
+                  "lat": 44.6192218,
+                  "lng": 15.4701608
+                },
+                "location_type": "APPROXIMATE",
+                "viewport": {
+                  "northeast": {
+                    "lat": 45.12303499999999,
+                    "lng": 16.1410742
+                  },
+                  "southwest": {
+                    "lat": 44.2712142,
+                    "lng": 14.6828622
+                  }
+                }
+              },
+              "place_id": "ChIJl4jQ8frXY0cRoLQrhlCtAAM",
+              "types": [
+                "administrative_area_level_1",
+                "political"
+              ]
+            }
+          ],
+          "status": "OK"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Coordinates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Coordinates": {
+      "main": [
+        [
+          {
+            "node": "Places",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Places": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert row": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append or update row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Insert row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Get row(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s)": {
+      "main": [
+        [
+          {
+            "node": "Places1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Places1": {
+      "main": [
+        [
+          {
+            "node": "Split Out1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out1": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append or update row in sheet1": {
+      "main": [
+        [
+          {
+            "node": "Aggregate1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate1": {
+      "main": [
+        [
+          {
+            "node": "Update row(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update row(s)": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Aggregate2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate2": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "7d9a1004-f583-435f-9613-9f1c48441ca3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a7520be8a288eac4ff15171b6f0391cd16190357b419eef7f499d3e23ac6aa4d"
+  },
+  "id": "rH0vCG8z2vt0esGS",
+  "tags": []
+}
