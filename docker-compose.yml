@@ -26,6 +26,12 @@ services:
       - N8N_RUNNERS_BROKER_LISTEN_ADDRESS=0.0.0.0
       - N8N_RUNNERS_AUTH_TOKEN=${N8N_RUNNERS_AUTH_TOKEN}
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      # Binary data on disk (not SQLite) — needed for XLSX attachments
+      - N8N_DEFAULT_BINARY_DATA_MODE=filesystem
+      # Execution history retention (1 year for audit)
+      - EXECUTIONS_DATA_MAX_AGE=8760
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_PRUNE_MAX_COUNT=10000
       ### workflow vars
       - PLACES_API=${PLACES_API}
     deploy:
