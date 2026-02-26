@@ -1,0 +1,107 @@
+{
+  "name": "[medika-preorders] WF-06: Order Submitter",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "id": "f6000000-0000-4000-8000-000000000001",
+      "name": "Sub-Workflow Input"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Transform validated order lines to Medika API format\nconst input = $input.first().json;\nconst lines = input.validatedLines || [];\n\n// Build the order payload in expected API format\nconst orderPayload = {\n  orderDate: new Date().toISOString(),\n  senderEmail: input.senderEmail || '',\n  approvedBy: input.decidedBy || 'system',\n  approvalComments: input.comments || '',\n  lineItems: lines.map((line, idx) => ({\n    lineNumber: idx + 1,\n    drugCode: line.drugCode || (line.registryMatch ? line.registryMatch.code : null),\n    articleName: line.articleName || (line.registryMatch ? line.registryMatch.name : ''),\n    quantity: line.quantity,\n    unit: line.unit || 'kom',\n    matchStatus: line.matchStatus,\n    parseMethod: line.parseMethod,\n    pharmacyId: line.pharmacyId || null,\n    pharmacyName: line.pharmacyName || null\n  })),\n  totalLines: lines.length,\n  metadata: {\n    emailSubject: input.emailSubject || '',\n    processedAt: new Date().toISOString()\n  }\n};\n\nreturn [{\n  json: {\n    orderPayload: orderPayload\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0],
+      "id": "f6000000-0000-4000-8000-000000000002",
+      "name": "Build API Payload"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.MEDIKA_PREORDERS_ORDER_API_URL || 'https://webhook.site/mock-medika-order' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.orderPayload) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 0],
+      "id": "f6000000-0000-4000-8000-000000000003",
+      "name": "Submit Order to API"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Process the API response\nconst apiResponse = $input.first().json;\nconst orderPayload = $('Build API Payload').first().json.orderPayload;\n\nreturn [{\n  json: {\n    submitted: true,\n    orderId: apiResponse.orderId || apiResponse.id || 'MOCK-' + Date.now(),\n    confirmationId: apiResponse.confirmationId || null,\n    apiResponse: apiResponse,\n    submittedAt: new Date().toISOString(),\n    lineCount: orderPayload.totalLines,\n    senderEmail: orderPayload.senderEmail\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 0],
+      "id": "f6000000-0000-4000-8000-000000000004",
+      "name": "Process API Response"
+    }
+  ],
+  "connections": {
+    "Sub-Workflow Input": {
+      "main": [
+        [
+          {
+            "node": "Build API Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build API Payload": {
+      "main": [
+        [
+          {
+            "node": "Submit Order to API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Order to API": {
+      "main": [
+        [
+          {
+            "node": "Process API Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "medika-preorders"
+    }
+  ]
+}

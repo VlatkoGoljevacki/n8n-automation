@@ -1,0 +1,48 @@
+{
+  "name": "[medika-preorders] WF-04: Article Validator",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "id": "f4000000-0000-4000-8000-000000000001",
+      "name": "Sub-Workflow Input"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Mock drug registry lookup\n// In production: replace with HTTP Request to Medika drug registry API\n\nconst input = $input.first().json;\nconst orderLines = input.orderLines || [];\n\nif (orderLines.length === 0) {\n  return [{\n    json: {\n      validated: true,\n      lineCount: 0,\n      matchSummary: { exact: 0, probable: 0, unmatched: 0 },\n      validatedLines: [],\n      unmatchedLines: []\n    }\n  }];\n}\n\n// Mock drug registry (replace with API call in production)\nconst MOCK_REGISTRY = {\n  'MED-12345': { name: 'Ibuprofen 400mg', manufacturer: 'Belupo', unit: 'kom', priceHRK: 25.50 },\n  'MED-12346': { name: 'Paracetamol 500mg', manufacturer: 'Pliva', unit: 'kom', priceHRK: 15.00 },\n  'MED-12347': { name: 'Amoksicilin 500mg', manufacturer: 'Sandoz', unit: 'kom', priceHRK: 45.00 },\n  'MED-12348': { name: 'Omeprazol 20mg', manufacturer: 'Krka', unit: 'kom', priceHRK: 30.00 },\n  'MED-12349': { name: 'Diklofenak 50mg', manufacturer: 'Belupo', unit: 'kom', priceHRK: 20.00 },\n  'MED-12350': { name: 'Metformin 850mg', manufacturer: 'Pliva', unit: 'kom', priceHRK: 18.00 },\n};\n\n// Simple fuzzy match by name (Levenshtein-like)\nfunction similarity(a, b) {\n  a = a.toLowerCase().trim();\n  b = b.toLowerCase().trim();\n  if (a === b) return 1.0;\n  if (a.includes(b) || b.includes(a)) return 0.9;\n  // Simple word overlap\n  const wordsA = a.split(/\\s+/);\n  const wordsB = b.split(/\\s+/);\n  const common = wordsA.filter(w => wordsB.some(wb => wb.includes(w) || w.includes(wb)));\n  return common.length / Math.max(wordsA.length, wordsB.length);\n}\n\nconst validatedLines = [];\nconst unmatchedLines = [];\nlet exact = 0, probable = 0, unmatched = 0;\n\nfor (const line of orderLines) {\n  let matchStatus = 'UNMATCHED';\n  let registryMatch = null;\n\n  // 1. Try exact code match\n  if (line.drugCode && MOCK_REGISTRY[line.drugCode]) {\n    matchStatus = 'EXACT_MATCH';\n    registryMatch = { ...MOCK_REGISTRY[line.drugCode], matchedBy: 'drugCode' };\n    exact++;\n  }\n  // 2. Try fuzzy name match\n  else if (line.articleName) {\n    let bestScore = 0;\n    let bestMatch = null;\n    for (const [code, entry] of Object.entries(MOCK_REGISTRY)) {\n      const score = similarity(line.articleName, entry.name);\n      if (score > bestScore) {\n        bestScore = score;\n        bestMatch = { code, ...entry };\n      }\n    }\n    if (bestScore >= 0.85) {\n      matchStatus = 'PROBABLE_MATCH';\n      registryMatch = { ...bestMatch, matchedBy: 'articleName', confidence: bestScore };\n      probable++;\n    } else {\n      unmatched++;\n    }\n  } else {\n    unmatched++;\n  }\n\n  const validated = {\n    ...line,\n    matchStatus: matchStatus,\n    registryMatch: registryMatch,\n    validatedAt: new Date().toISOString()\n  };\n\n  validatedLines.push(validated);\n  if (matchStatus === 'UNMATCHED') {\n    unmatchedLines.push(validated);\n  }\n}\n\nreturn [{\n  json: {\n    validated: true,\n    lineCount: validatedLines.length,\n    matchSummary: { exact, probable, unmatched },\n    validatedLines: validatedLines,\n    unmatchedLines: unmatchedLines\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0],
+      "id": "f4000000-0000-4000-8000-000000000002",
+      "name": "Validate Against Registry"
+    }
+  ],
+  "connections": {
+    "Sub-Workflow Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Against Registry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "medika-preorders"
+    }
+  ]
+}

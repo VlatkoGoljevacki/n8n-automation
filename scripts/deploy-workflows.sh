@@ -19,9 +19,11 @@ set -euo pipefail
 
 # Load .env if present (for N8N_API_KEY)
 if [ -f .env ]; then
-  set -a
-  source .env
-  set +a
+  while IFS= read -r line || [ -n "$line" ]; do
+    # Skip comments and empty lines
+    [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+    export "$line"
+  done < .env
 fi
 
 N8N_API_URL="${N8N_API_URL:-http://localhost:5678}"
@@ -66,8 +68,16 @@ if [ ${#files[@]} -eq 0 ]; then
 fi
 
 # Fetch existing workflows to match by name
-existing_json=$(curl -s "${N8N_API_URL}/api/v1/workflows?limit=100" \
-  -H "X-N8N-API-KEY: ${N8N_API_KEY}")
+# Use python to extract name→id mapping because the n8n API response may
+# contain unescaped control characters in jsCode that break jq
+existing_map=$(curl -s "${N8N_API_URL}/api/v1/workflows?limit=100" \
+  -H "X-N8N-API-KEY: ${N8N_API_KEY}" | \
+  python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for w in data.get('data', []):
+    print(w['id'] + '\t' + w['name'])
+" 2>/dev/null || true)
 
 created=0
 updated=0
@@ -80,13 +90,12 @@ for file in "${files[@]}"; do
   echo -n "  $filename ($workflow_name) ... "
 
   # Check if a workflow with this name already exists (first match)
-  existing_id=$(echo "$existing_json" | jq -r --arg name "$workflow_name" \
-    '.data[] | select(.name == $name) | .id' | head -1)
+  existing_id=$(echo "$existing_map" | awk -F'\t' -v name="$workflow_name" '$2 == name { print $1; exit }')
 
   if [ -n "$existing_id" ]; then
-    # Update existing workflow (PUT)
-    payload=$(jq --arg id "$existing_id" 'del(.active, .versionId, .tags, .meta, .updatedAt, .createdAt) | .id = $id' "$file")
-    http_code=$(echo "$payload" | curl -s -o /dev/null -w "%{http_code}" \
+    # Update existing workflow (PUT) — pipe jq directly to curl to preserve JSON integrity
+    http_code=$(jq 'del(.active, .id, .versionId, .tags, .meta, .updatedAt, .createdAt)' "$file" | \
+      curl -s -o /dev/null -w "%{http_code}" \
       -X PUT "${N8N_API_URL}/api/v1/workflows/${existing_id}" \
       -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
       -H "Content-Type: application/json" \
@@ -100,9 +109,9 @@ for file in "${files[@]}"; do
       failed=$((failed + 1))
     fi
   else
-    # Create new workflow (POST) — strip read-only fields
-    payload=$(jq 'del(.active, .id, .versionId, .tags, .meta, .updatedAt, .createdAt)' "$file")
-    http_code=$(echo "$payload" | curl -s -o /dev/null -w "%{http_code}" \
+    # Create new workflow (POST) — pipe jq directly to curl to preserve JSON integrity
+    http_code=$(jq 'del(.active, .id, .versionId, .tags, .meta, .updatedAt, .createdAt)' "$file" | \
+      curl -s -o /dev/null -w "%{http_code}" \
       -X POST "${N8N_API_URL}/api/v1/workflows" \
       -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
       -H "Content-Type: application/json" \

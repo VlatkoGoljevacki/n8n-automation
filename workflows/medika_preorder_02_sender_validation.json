@@ -1,0 +1,48 @@
+{
+  "name": "[medika-preorders] WF-02: Sender Validation",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "id": "e2000000-0000-4000-8000-000000000001",
+      "name": "Sub-Workflow Input"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Approved senders list — replace with DataTable or API lookup in production\nconst APPROVED_SENDERS = [\n  {\n    email: 'wladisha@gmail.com',\n    name: 'Wladisha (Test)',\n    authorizedPharmacyIds: ['PH001', 'PH002'],\n  },\n  {\n    email: 'test@medika.hr',\n    name: 'Test Sender',\n    authorizedPharmacyIds: ['PH001'],\n  },\n];\n\nconst input = $input.first().json;\nconst senderEmail = (input.senderEmail || '').toLowerCase().trim();\n\n// Exact email match\nconst sender = APPROVED_SENDERS.find(\n  s => s.email.toLowerCase() === senderEmail\n);\n\nif (sender) {\n  return [{\n    json: {\n      valid: true,\n      senderEmail: senderEmail,\n      senderName: sender.name,\n      authorizedPharmacyIds: sender.authorizedPharmacyIds,\n      validatedAt: new Date().toISOString(),\n    }\n  }];\n}\n\n// Domain match fallback (e.g. anyone @medika.hr is valid)\nconst domain = senderEmail.split('@')[1];\nconst APPROVED_DOMAINS = ['medika.hr'];\n\nif (APPROVED_DOMAINS.includes(domain)) {\n  return [{\n    json: {\n      valid: true,\n      senderEmail: senderEmail,\n      senderName: senderEmail,\n      authorizedPharmacyIds: ['ALL'],\n      validatedAt: new Date().toISOString(),\n    }\n  }];\n}\n\n// Not authorized\nreturn [{\n  json: {\n    valid: false,\n    senderEmail: senderEmail,\n    reason: `Sender ${senderEmail} is not in the approved senders list`,\n    validatedAt: new Date().toISOString(),\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0],
+      "id": "e2000000-0000-4000-8000-000000000002",
+      "name": "Validate Sender"
+    }
+  ],
+  "connections": {
+    "Sub-Workflow Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Sender",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "medika-preorders"
+    }
+  ]
+}
