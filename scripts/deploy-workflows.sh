@@ -1,20 +1,31 @@
 #!/usr/bin/env bash
 #
-# Deploy workflow JSON files to the n8n instance.
+# Deploy workflow JSON files to the n8n instance via REST API.
 #
 # Usage:
 #   ./scripts/deploy-workflows.sh                  # deploy all medika_preorder workflows
 #   ./scripts/deploy-workflows.sh workflows/medika_preorder_00_error_handler.json  # deploy one
 #
+# Requires:
+#   - jq
+#   - N8N_API_KEY env var (or set in .env) — generate in n8n Settings > API
+#   - N8N_API_URL env var (default: http://localhost:5678)
+#
 # Behavior:
-#   - If a workflow with the same name already exists in n8n, it updates it (by injecting the existing ID)
-#   - If no match is found, it creates a new workflow
-#   - Requires jq for JSON manipulation
+#   - If a workflow with the same name already exists, it updates it (PUT)
+#   - If no match is found, it creates a new workflow (POST)
 
 set -euo pipefail
 
-CONTAINER_NAME="n8n"
-CONTAINER_WORKFLOW_DIR="/home/node/workflows"
+# Load .env if present (for N8N_API_KEY)
+if [ -f .env ]; then
+  set -a
+  source .env
+  set +a
+fi
+
+N8N_API_URL="${N8N_API_URL:-http://localhost:5678}"
+N8N_API_KEY="${N8N_API_KEY:-}"
 
 # Check dependencies
 if ! command -v jq &>/dev/null; then
@@ -22,10 +33,20 @@ if ! command -v jq &>/dev/null; then
   exit 1
 fi
 
-# Check container is running
-if ! docker inspect "$CONTAINER_NAME" &>/dev/null; then
-  echo "Error: Container '$CONTAINER_NAME' is not running."
-  echo "Start it with: docker compose up -d"
+if [ -z "$N8N_API_KEY" ]; then
+  echo "Error: N8N_API_KEY is not set."
+  echo "Generate one in n8n: Settings > API, then add N8N_API_KEY to .env"
+  exit 1
+fi
+
+# Verify API connectivity
+http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+  "${N8N_API_URL}/api/v1/workflows?limit=1" \
+  -H "X-N8N-API-KEY: ${N8N_API_KEY}")
+
+if [ "$http_code" != "200" ]; then
+  echo "Error: Cannot reach n8n API at ${N8N_API_URL} (HTTP $http_code)"
+  echo "Check N8N_API_URL and N8N_API_KEY."
   exit 1
 fi
 
@@ -44,12 +65,11 @@ if [ ${#files[@]} -eq 0 ]; then
   exit 0
 fi
 
-# Export existing workflows to match by name
-# n8n exports as newline-delimited JSON objects, so we slurp them into an array
-echo "Fetching existing workflows from n8n..."
-existing_json=$(docker exec "$CONTAINER_NAME" n8n export:workflow --all --output=/dev/stdout 2>/dev/null | jq -s '.' || echo "[]")
+# Fetch existing workflows to match by name
+existing_json=$(curl -s "${N8N_API_URL}/api/v1/workflows?limit=100" \
+  -H "X-N8N-API-KEY: ${N8N_API_KEY}")
 
-imported=0
+created=0
 updated=0
 failed=0
 
@@ -59,40 +79,47 @@ for file in "${files[@]}"; do
 
   echo -n "  $filename ($workflow_name) ... "
 
-  # Check if a workflow with this name already exists (take first match)
-  existing_id=$(echo "$existing_json" | jq -r --arg name "$workflow_name" '[.[] | select(.name == $name) | .id] | first // empty' 2>/dev/null || true)
+  # Check if a workflow with this name already exists (first match)
+  existing_id=$(echo "$existing_json" | jq -r --arg name "$workflow_name" \
+    '.data[] | select(.name == $name) | .id' | head -1)
 
   if [ -n "$existing_id" ]; then
-    # Inject the existing ID so n8n updates instead of creating a duplicate
-    tmp_file=$(mktemp)
-    jq --arg id "$existing_id" '.id = $id' "$file" > "$tmp_file"
-    cp "$tmp_file" "workflows/.deploy_tmp_${filename}"
-    rm "$tmp_file"
+    # Update existing workflow (PUT)
+    payload=$(jq --arg id "$existing_id" 'del(.active, .versionId, .tags, .meta, .updatedAt, .createdAt) | .id = $id' "$file")
+    http_code=$(echo "$payload" | curl -s -o /dev/null -w "%{http_code}" \
+      -X PUT "${N8N_API_URL}/api/v1/workflows/${existing_id}" \
+      -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
+      -H "Content-Type: application/json" \
+      -d @-)
 
-    container_path="$CONTAINER_WORKFLOW_DIR/.deploy_tmp_${filename}"
-    if docker exec "$CONTAINER_NAME" n8n import:workflow --input="$container_path" > /dev/null 2>&1; then
+    if [ "$http_code" = "200" ]; then
       echo "UPDATED (id: $existing_id)"
-      ((updated++))
+      updated=$((updated + 1))
     else
-      echo "FAILED"
-      ((failed++))
+      echo "FAILED (HTTP $http_code)"
+      failed=$((failed + 1))
     fi
-    rm -f "workflows/.deploy_tmp_${filename}"
   else
-    # New workflow — import as-is
-    container_path="$CONTAINER_WORKFLOW_DIR/$filename"
-    if docker exec "$CONTAINER_NAME" n8n import:workflow --input="$container_path" > /dev/null 2>&1; then
+    # Create new workflow (POST) — strip read-only fields
+    payload=$(jq 'del(.active, .id, .versionId, .tags, .meta, .updatedAt, .createdAt)' "$file")
+    http_code=$(echo "$payload" | curl -s -o /dev/null -w "%{http_code}" \
+      -X POST "${N8N_API_URL}/api/v1/workflows" \
+      -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
+      -H "Content-Type: application/json" \
+      -d @-)
+
+    if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
       echo "CREATED"
-      ((imported++))
+      created=$((created + 1))
     else
-      echo "FAILED"
-      ((failed++))
+      echo "FAILED (HTTP $http_code)"
+      failed=$((failed + 1))
     fi
   fi
 done
 
 echo ""
-echo "Done: $imported created, $updated updated, $failed failed (${#files[@]} total)"
+echo "Done: $created created, $updated updated, $failed failed (${#files[@]} total)"
 
 if [ "$failed" -gt 0 ]; then
   exit 1
