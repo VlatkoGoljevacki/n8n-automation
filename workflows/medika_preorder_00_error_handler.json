@@ -61,20 +61,23 @@
     },
     {
       "parameters": {
-        "sendTo": "={{ $vars.MEDIKA_PREORDERS_ERROR_NOTIFY_EMAIL }}",
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "={{ $vars.MEDIKA_PREORDERS_ERROR_NOTIFY_EMAIL }}",
         "subject": "=[medika-preorders] ERROR in {{ $json.workflowName }}",
-        "message": "=<h2>Workflow Error</h2>\n<table style=\"border-collapse:collapse; font-family:sans-serif;\">\n<tr><td style=\"padding:4px 12px; font-weight:bold;\">Workflow</td><td style=\"padding:4px 12px;\">{{ $json.workflowName }}</td></tr>\n<tr><td style=\"padding:4px 12px; font-weight:bold;\">Failing Node</td><td style=\"padding:4px 12px;\">{{ $json.lastNode }}</td></tr>\n<tr><td style=\"padding:4px 12px; font-weight:bold;\">Error</td><td style=\"padding:4px 12px; color:red;\">{{ $json.errorMessage }}</td></tr>\n<tr><td style=\"padding:4px 12px; font-weight:bold;\">Execution ID</td><td style=\"padding:4px 12px;\">{{ $json.executionId }}</td></tr>\n<tr><td style=\"padding:4px 12px; font-weight:bold;\">Time</td><td style=\"padding:4px 12px;\">{{ $json.timestamp }}</td></tr>\n</table>",
+        "bodyContent": "=<h2>Workflow Error</h2>\n<table style=\"border-collapse:collapse; font-family:sans-serif;\">\n<tr><td style=\"padding:4px 12px; font-weight:bold;\">Workflow</td><td style=\"padding:4px 12px;\">{{ $json.workflowName }}</td></tr>\n<tr><td style=\"padding:4px 12px; font-weight:bold;\">Failing Node</td><td style=\"padding:4px 12px;\">{{ $json.lastNode }}</td></tr>\n<tr><td style=\"padding:4px 12px; font-weight:bold;\">Error</td><td style=\"padding:4px 12px; color:red;\">{{ $json.errorMessage }}</td></tr>\n<tr><td style=\"padding:4px 12px; font-weight:bold;\">Execution ID</td><td style=\"padding:4px 12px;\">{{ $json.executionId }}</td></tr>\n<tr><td style=\"padding:4px 12px; font-weight:bold;\">Time</td><td style=\"padding:4px 12px;\">{{ $json.timestamp }}</td></tr>\n</table>",
+        "bodyContentType": "html",
         "options": {}
       },
-      "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2.1,
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
       "position": [440, 0],
       "id": "a1b2c3d4-0000-4000-8000-000000000003",
       "name": "Send Error Email",
       "credentials": {
-        "smtp": {
+        "microsoftOutlookOAuth2Api": {
           "id": "",
-          "name": "Medika Preorders - SMTP"
+          "name": "Medika Preorders - Microsoft Outlook"
         }
       }
     }

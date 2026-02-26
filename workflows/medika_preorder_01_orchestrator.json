@@ -1,0 +1,186 @@
+{
+  "name": "[medika-preorders] WF-01: Orchestrator",
+  "nodes": [
+    {
+      "parameters": {
+        "event": "messageReceived",
+        "simple": false,
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlookTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "id": "b1000000-0000-4000-8000-000000000001",
+      "name": "New Email Received",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "",
+          "name": "Medika Preorders - Microsoft Outlook"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1000001-0000-4000-8000-000000000001",
+              "name": "config_parseHtmlBody",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "c1000001-0000-4000-8000-000000000002",
+              "name": "senderEmail",
+              "value": "={{ $json.from.emailAddress.address }}",
+              "type": "string"
+            },
+            {
+              "id": "c1000001-0000-4000-8000-000000000003",
+              "name": "senderName",
+              "value": "={{ $json.from.emailAddress.name }}",
+              "type": "string"
+            },
+            {
+              "id": "c1000001-0000-4000-8000-000000000004",
+              "name": "emailSubject",
+              "value": "={{ $json.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "c1000001-0000-4000-8000-000000000005",
+              "name": "emailId",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "c1000001-0000-4000-8000-000000000006",
+              "name": "hasAttachments",
+              "value": "={{ $json.hasAttachments }}",
+              "type": "boolean"
+            },
+            {
+              "id": "c1000001-0000-4000-8000-000000000007",
+              "name": "receivedAt",
+              "value": "={{ $json.receivedDateTime }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "includeBinary": true
+        }
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [240, 0],
+      "id": "b1000000-0000-4000-8000-000000000002",
+      "name": "Extract Email Metadata"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "d1000001-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.hasAttachments }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [480, 0],
+      "id": "b1000000-0000-4000-8000-000000000003",
+      "name": "Has Attachments?"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [720, -100],
+      "id": "b1000000-0000-4000-8000-000000000004",
+      "name": "TODO: Process Attachments"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [720, 100],
+      "id": "b1000000-0000-4000-8000-000000000005",
+      "name": "TODO: No Attachments (check body?)"
+    }
+  ],
+  "connections": {
+    "New Email Received": {
+      "main": [
+        [
+          {
+            "node": "Extract Email Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Email Metadata": {
+      "main": [
+        [
+          {
+            "node": "Has Attachments?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Attachments?": {
+      "main": [
+        [
+          {
+            "node": "TODO: Process Attachments",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TODO: No Attachments (check body?)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "medika-preorders"
+    }
+  ]
+}

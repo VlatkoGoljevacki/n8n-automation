@@ -301,8 +301,8 @@ A demo-ready system with a test inbox, mock APIs, and AI parsing is achievable i
 
 | # | Task | Est. Hours | Actual Hours | Notes |
 |---|---|---|---|---|
-| 1 | Infra setup (docker-compose, test email) | 1h | 0.25h | docker-compose, .env, .gitignore updated. Test email: kamehameha.digital@outlook.com (IMAP, switch to Graph API with Medika's enterprise tenant later) |
-| 2 | WF-00: Error handler | 0.5h | | 3 nodes, simple |
+| 1 | Infra setup (docker-compose, test email) | 1h | 0.25h | docker-compose, .env, .gitignore updated. Deploy script, credentials README. |
+| 2 | WF-00: Error handler | 0.5h | 1h | 3 nodes: Error Trigger → Format Context → Send Email (Microsoft Outlook via Graph API). Most time on Azure AD OAuth2 setup: audience type gotcha, SMTP auth dead for personal accounts, redirect URI. |
 | 3 | WF-01: Orchestrator | 2-3h | | Core flow, trigger, sub-workflow wiring |
 | 4 | WF-02: Sender validation (DataTable) | 1h | | Lookup against hardcoded list |
 | 5 | WF-03: XLSX parser + rule-based detection | 3-4h | | Code node with header matching logic |
