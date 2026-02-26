@@ -45,8 +45,9 @@ if [ ${#files[@]} -eq 0 ]; then
 fi
 
 # Export existing workflows to match by name
+# n8n exports as newline-delimited JSON objects, so we slurp them into an array
 echo "Fetching existing workflows from n8n..."
-existing_json=$(docker exec "$CONTAINER_NAME" n8n export:workflow --all --output=/dev/stdout 2>/dev/null || echo "[]")
+existing_json=$(docker exec "$CONTAINER_NAME" n8n export:workflow --all --output=/dev/stdout 2>/dev/null | jq -s '.' || echo "[]")
 
 imported=0
 updated=0
@@ -58,8 +59,8 @@ for file in "${files[@]}"; do
 
   echo -n "  $filename ($workflow_name) ... "
 
-  # Check if a workflow with this name already exists
-  existing_id=$(echo "$existing_json" | jq -r --arg name "$workflow_name" '.[] | select(.name == $name) | .id // empty' 2>/dev/null || true)
+  # Check if a workflow with this name already exists (take first match)
+  existing_id=$(echo "$existing_json" | jq -r --arg name "$workflow_name" '[.[] | select(.name == $name) | .id] | first // empty' 2>/dev/null || true)
 
   if [ -n "$existing_id" ]; then
     # Inject the existing ID so n8n updates instead of creating a duplicate
