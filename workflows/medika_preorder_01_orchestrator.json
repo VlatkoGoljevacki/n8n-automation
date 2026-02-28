@@ -1,10 +1,9 @@
 {
   "name": "[medika-preorders] WF-01: Orchestrator",
+  "active": false,
   "nodes": [
     {
       "parameters": {
-        "event": "messageReceived",
-        "simple": false,
         "pollTimes": {
           "item": [
             {
@@ -12,73 +11,272 @@
             }
           ]
         },
+        "output": "raw",
+        "filters": {
+          "hasAttachments": true,
+          "foldersToInclude": [
+            "AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l-fZwFAQBhdL-ANklNR6oMNJhB5iOiAAACAQwAAAA="
+          ],
+          "readStatus": "unread"
+        },
         "options": {
-          "downloadAttachments": true,
-          "readStatus": "unread",
-          "hasAttachments": true
+          "downloadAttachments": true
         }
       },
       "type": "n8n-nodes-base.microsoftOutlookTrigger",
       "typeVersion": 1,
-      "position": [0, 0],
+      "position": [
+        0,
+        0
+      ],
       "id": "b1000000-0000-4000-8000-000000000001",
       "name": "New Email Received",
       "credentials": {
         "microsoftOutlookOAuth2Api": {
-          "id": "",
-          "name": "Medika Preorders - Microsoft Outlook"
+          "id": "jzzDNHXRz5JAGlpl",
+          "name": "Microsoft Outlook account"
         }
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Environment config — single source of truth for all workflows.\n// Edit here to switch between dev and prod.\n// ============================================================\nconst erpUser = process.env.MEDIKA_ERP_USERNAME || '';\nconst erpPass = process.env.MEDIKA_ERP_PASSWORD || '';\n\nif (!erpUser || !erpPass) {\n  throw new Error('MEDIKA_ERP_USERNAME and MEDIKA_ERP_PASSWORD env vars are required');\n}\n\nreturn [{\n  json: {\n    config: {\n      erpApiUrl: process.env.MEDIKA_ERP_URL || 'https://testnar.medika.hr',\n      erpUsername: erpUser,\n      erpPassword: erpPass,\n      businessCenterDefault: '10',\n      defaultDiscountPerc: 0.0,\n      customersApiPath: '/api/Customers2',\n      customerCacheTTLHours: 24,\n      approvalNotifyEmail: process.env.MEDIKA_PREORDERS_APPROVAL_EMAIL || '',\n      errorNotifyEmail: process.env.MEDIKA_PREORDERS_ERROR_EMAIL || '',\n      parseHtmlBody: false,\n      aiParsingEnabled: true\n    }\n  },\n  binary: $input.first().binary\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "b1000000-0000-4000-8000-000000000040",
+      "name": "Config"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check static data for a valid (non-expired) ERP token\nconst staticData = $getWorkflowStaticData('global');\nconst config = $input.first().json.config;\n\nif (staticData.erpToken && staticData.erpTokenExpiresAt) {\n  const bufferMs = 5 * 60 * 1000; // refresh 5 min before expiry\n  if (Date.now() < (staticData.erpTokenExpiresAt - bufferMs)) {\n    return [{\n      json: { config, erpToken: staticData.erpToken, tokenCacheHit: true },\n      binary: $input.first().binary\n    }];\n  }\n}\n\n// Token missing or expired\nreturn [{\n  json: { config, erpToken: null, tokenCacheHit: false },\n  binary: $input.first().binary\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "id": "b1000000-0000-4000-8000-000000000060",
+      "name": "Check ERP Token"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "d1000060-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.tokenCacheHit }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "id": "b1000000-0000-4000-8000-000000000061",
+      "name": "Token Valid?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build OAuth2 token request\nconst input = $input.first();\nconst config = input.json.config;\n\nreturn [{\n  json: {\n    config,\n    tokenUrl: config.erpApiUrl + '/Token',\n    tokenBody: 'grant_type=password&username=' + encodeURIComponent(config.erpUsername) + '&password=' + encodeURIComponent(config.erpPassword)\n  },\n  binary: input.binary\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        208
+      ],
+      "id": "b1000000-0000-4000-8000-000000000062",
+      "name": "Prepare Auth"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.tokenUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "={{ $json.tokenBody }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        208
+      ],
+      "id": "b1000000-0000-4000-8000-000000000063",
+      "name": "Fetch ERP Token"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Store ERP token in static data with expiry\nconst staticData = $getWorkflowStaticData('global');\nconst tokenResponse = $input.first().json;\nconst config = $('Prepare Auth').first().json.config;\n\nconst token = tokenResponse.access_token;\nif (!token) {\n  throw new Error('Failed to get ERP token: ' + JSON.stringify(tokenResponse));\n}\n\n// Parse expiry from token response\nlet expiresAt;\nif (tokenResponse['.expires']) {\n  expiresAt = new Date(tokenResponse['.expires']).getTime();\n} else if (tokenResponse.expires_in) {\n  expiresAt = Date.now() + (tokenResponse.expires_in * 1000);\n} else {\n  expiresAt = Date.now() + (60 * 60 * 1000); // 1h default\n}\n\nstaticData.erpToken = token;\nstaticData.erpTokenExpiresAt = expiresAt;\n\nreturn [{\n  json: { config, erpToken: token, tokenCacheHit: false },\n  binary: $('Check ERP Token').first().binary\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        208
+      ],
+      "id": "b1000000-0000-4000-8000-000000000064",
+      "name": "Store ERP Token"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check if customer list is cached in static data\nconst staticData = $getWorkflowStaticData('global');\nconst input = $input.first().json;\nconst config = input.config;\nconst erpToken = input.erpToken;\nconst TTL = (config.customerCacheTTLHours || 24) * 60 * 60 * 1000;\nconst now = Date.now();\n\nif (staticData.customers && staticData.customersLoadedAt && (now - staticData.customersLoadedAt) < TTL) {\n  // Cache hit — build lookup maps\n  const customerById = {};\n  const deliveryPlaceById = {};\n\n  for (const c of staticData.customers) {\n    customerById[c.ID] = {\n      name: c.Name || (c.Name1 + ' ' + (c.Name2 || '')).trim(),\n      name1: c.Name1, name2: c.Name2, oib: c.OIB,\n      city: c.City, postCode: c.PostCode, street: c.Street\n    };\n    if (c.DeliveryPlaces) {\n      for (const dp of c.DeliveryPlaces) {\n        deliveryPlaceById[dp.ID] = {\n          customerId: c.ID, customerName: c.Name1,\n          name: dp.Name || (dp.Name1 + ' ' + (dp.Name2 || '')).trim(),\n          name1: dp.Name1, name2: dp.Name2,\n          city: dp.City, postCode: dp.PostCode, street: dp.Street\n        };\n      }\n    }\n  }\n\n  return [{\n    json: {\n      config, erpToken,\n      customerCacheHit: true,\n      customerLookup: {\n        customerById, deliveryPlaceById,\n        totalCustomers: Object.keys(customerById).length,\n        totalDeliveryPlaces: Object.keys(deliveryPlaceById).length,\n        loadedAt: new Date(staticData.customersLoadedAt).toISOString(),\n        source: 'cache'\n      }\n    },\n    binary: $input.first().binary\n  }];\n}\n\n// Cache miss\nreturn [{\n  json: { config, erpToken, customerCacheHit: false, customerLookup: null },\n  binary: $input.first().binary\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ],
+      "id": "b1000000-0000-4000-8000-000000000050",
+      "name": "Check Customer Cache"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "d1000050-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.customerCacheHit }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        0
+      ],
+      "id": "b1000000-0000-4000-8000-000000000051",
+      "name": "Customers Cached?"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.config.erpApiUrl + $json.config.customersApiPath }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.erpToken }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        208
+      ],
+      "id": "b1000000-0000-4000-8000-000000000054",
+      "name": "Fetch Customers API"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Store fetched customer list in static data and build lookup maps\nconst staticData = $getWorkflowStaticData('global');\nconst items = $input.all();\nconst cacheInput = $('Check Customer Cache').first().json;\nconst config = cacheInput.config;\nconst erpToken = cacheInput.erpToken;\n\nconst customers = items.map(item => item.json);\nstaticData.customers = customers;\nstaticData.customersLoadedAt = Date.now();\n\nconst customerById = {};\nconst deliveryPlaceById = {};\n\nfor (const c of customers) {\n  customerById[c.ID] = {\n    name: c.Name || (c.Name1 + ' ' + (c.Name2 || '')).trim(),\n    name1: c.Name1, name2: c.Name2, oib: c.OIB,\n    city: c.City, postCode: c.PostCode, street: c.Street\n  };\n  if (c.DeliveryPlaces) {\n    for (const dp of c.DeliveryPlaces) {\n      deliveryPlaceById[dp.ID] = {\n        customerId: c.ID, customerName: c.Name1,\n        name: dp.Name || (dp.Name1 + ' ' + (dp.Name2 || '')).trim(),\n        name1: dp.Name1, name2: dp.Name2,\n        city: dp.City, postCode: dp.PostCode, street: dp.Street\n      };\n    }\n  }\n}\n\nreturn [{\n  json: {\n    config, erpToken,\n    customerCacheHit: false,\n    customerLookup: {\n      customerById, deliveryPlaceById,\n      totalCustomers: Object.keys(customerById).length,\n      totalDeliveryPlaces: Object.keys(deliveryPlaceById).length,\n      loadedAt: new Date(staticData.customersLoadedAt).toISOString(),\n      source: 'api'\n    }\n  },\n  binary: $('Check Customer Cache').first().binary\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        208
+      ],
+      "id": "b1000000-0000-4000-8000-000000000055",
+      "name": "Store Customer Cache"
     },
     {
       "parameters": {
         "assignments": {
           "assignments": [
             {
-              "id": "c1000001-0000-4000-8000-000000000001",
-              "name": "config_parseHtmlBody",
-              "value": false,
-              "type": "boolean"
-            },
-            {
               "id": "c1000001-0000-4000-8000-000000000002",
               "name": "senderEmail",
-              "value": "={{ $json.from.emailAddress.address }}",
+              "value": "={{ $('New Email Received').item.json.from.emailAddress.address }}",
               "type": "string"
             },
             {
               "id": "c1000001-0000-4000-8000-000000000004",
               "name": "emailSubject",
-              "value": "={{ $json.subject }}",
+              "value": "={{ $('New Email Received').item.json.subject }}",
               "type": "string"
             },
             {
               "id": "c1000001-0000-4000-8000-000000000005",
               "name": "emailId",
-              "value": "={{ $json.id }}",
+              "value": "={{ $('New Email Received').item.json.id }}",
               "type": "string"
             },
             {
               "id": "c1000001-0000-4000-8000-000000000006",
               "name": "hasAttachments",
-              "value": "={{ $json.hasAttachments }}",
+              "value": "={{ $('New Email Received').item.json.hasAttachments }}",
               "type": "boolean"
             },
             {
               "id": "c1000001-0000-4000-8000-000000000007",
               "name": "receivedAt",
-              "value": "={{ $json.receivedDateTime }}",
+              "value": "={{ $('New Email Received').item.json.receivedDateTime }}",
               "type": "string"
             }
           ]
         },
-        "options": {
-          "includeBinary": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [240, 0],
+      "position": [
+        2640,
+        0
+      ],
       "id": "b1000000-0000-4000-8000-000000000002",
       "name": "Extract Email Metadata"
     },
@@ -93,7 +291,10 @@
       },
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [480, 0],
+      "position": [
+        2880,
+        0
+      ],
       "id": "b1000000-0000-4000-8000-000000000010",
       "name": "WF-02: Validate Sender",
       "onError": "continueRegularOutput"
@@ -123,7 +324,10 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [720, 0],
+      "position": [
+        3120,
+        0
+      ],
       "id": "b1000000-0000-4000-8000-000000000011",
       "name": "Sender Valid?"
     },
@@ -152,18 +356,23 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [960, -100],
+      "position": [
+        3360,
+        -96
+      ],
       "id": "b1000000-0000-4000-8000-000000000003",
       "name": "Has Attachments?"
     },
     {
       "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "// Re-attach binary data from the original email trigger\n// After WF-02, the current context only has validation results.\n// We need the original binary (XLSX attachment) for WF-03.\nconst emailMeta = $('Extract Email Metadata').first();\nconst senderValidation = $('WF-02: Validate Sender').first().json;\n\nreturn [{\n  json: {\n    senderEmail: emailMeta.json.senderEmail,\n    emailSubject: emailMeta.json.emailSubject,\n    emailId: emailMeta.json.emailId,\n    receivedAt: emailMeta.json.receivedAt,\n    senderName: senderValidation.senderName || '',\n    authorizedPharmacyIds: senderValidation.authorizedPharmacyIds || []\n  },\n  binary: emailMeta.binary\n}];\n"
+        "jsCode": "// Re-attach binary data and carry config + customer data from WF-02\nconst emailMeta = $('Extract Email Metadata').first();\nconst sv = $('WF-02: Validate Sender').first().json;\nconst config = $('Config').first().json.config;\n\nreturn [{\n  json: {\n    config: config,\n    senderEmail: emailMeta.json.senderEmail,\n    emailSubject: emailMeta.json.emailSubject,\n    emailId: emailMeta.json.emailId,\n    receivedAt: emailMeta.json.receivedAt,\n    senderName: sv.senderName || '',\n    customer: sv.customer || null,\n    deliveryPlace: sv.deliveryPlace || null,\n    businessCenter: sv.businessCenter || config.businessCenterDefault,\n    defaultDiscountPerc: sv.defaultDiscountPerc || config.defaultDiscountPerc\n  },\n  binary: emailMeta.binary\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, -200],
+      "position": [
+        3600,
+        -208
+      ],
       "id": "b1000000-0000-4000-8000-000000000020",
       "name": "Prepare Parser Input"
     },
@@ -178,7 +387,10 @@
       },
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [1440, -200],
+      "position": [
+        3840,
+        -208
+      ],
       "id": "b1000000-0000-4000-8000-000000000021",
       "name": "WF-03: Parse XLSX",
       "onError": "continueRegularOutput"
@@ -208,18 +420,23 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1680, -200],
+      "position": [
+        4080,
+        -208
+      ],
       "id": "b1000000-0000-4000-8000-000000000022",
       "name": "Parse Succeeded?"
     },
     {
       "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "// Prepare input for article validation: pass orderLines + context\nconst parseResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\n\nreturn [{\n  json: {\n    orderLines: parseResult.orderLines || [],\n    mapping: parseResult.mapping || {},\n    lineCount: parseResult.lineCount || 0,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject\n  }\n}];\n"
+        "jsCode": "// Prepare input for data validation with customer lookup\nconst parseResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json.config;\n\n// Get customer lookup from whichever cache path was taken\nconst cacheCheck = $('Check Customer Cache').first().json;\nlet customerLookup = cacheCheck.customerLookup;\nif (!customerLookup) {\n  customerLookup = $('Store Customer Cache').first().json.customerLookup;\n}\n\nreturn [{\n  json: {\n    config: config,\n    orderLines: parseResult.orderLines || [],\n    lineCount: parseResult.lineCount || 0,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    customer: parserInput.customer,\n    deliveryPlace: parserInput.deliveryPlace,\n    defaultDiscountPerc: parserInput.defaultDiscountPerc,\n    customerLookup: customerLookup\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1920, -300],
+      "position": [
+        4320,
+        -304
+      ],
       "id": "b1000000-0000-4000-8000-000000000023",
       "name": "Prepare Validator Input"
     },
@@ -234,19 +451,24 @@
       },
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [2160, -300],
+      "position": [
+        4560,
+        -304
+      ],
       "id": "b1000000-0000-4000-8000-000000000024",
-      "name": "WF-04: Validate Articles",
+      "name": "WF-04: Validate Data",
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "// Merge validation results with email context for approval\nconst validationResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\n\nreturn [{\n  json: {\n    ...validationResult,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId\n  }\n}];\n"
+        "jsCode": "// Merge validation results with config + customer context for approval\nconst validationResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json.config;\n\n// Get customer lookup\nconst cacheCheck = $('Check Customer Cache').first().json;\nlet customerLookup = cacheCheck.customerLookup;\nif (!customerLookup) {\n  customerLookup = $('Store Customer Cache').first().json.customerLookup;\n}\n\nreturn [{\n  json: {\n    config: config,\n    ...validationResult,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    customer: parserInput.customer,\n    deliveryPlace: parserInput.deliveryPlace,\n    businessCenter: parserInput.businessCenter,\n    customerLookup: customerLookup\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2400, -300],
+      "position": [
+        4800,
+        -304
+      ],
       "id": "b1000000-0000-4000-8000-000000000025",
       "name": "Prepare Approval Input"
     },
@@ -261,7 +483,10 @@
       },
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [2640, -300],
+      "position": [
+        5040,
+        -304
+      ],
       "id": "b1000000-0000-4000-8000-000000000026",
       "name": "WF-05: Approval Gate",
       "onError": "continueRegularOutput"
@@ -291,7 +516,10 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [2880, -300],
+      "position": [
+        5280,
+        -304
+      ],
       "id": "b1000000-0000-4000-8000-000000000027",
       "name": "Approved?"
     },
@@ -306,7 +534,10 @@
       },
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [3120, -400],
+      "position": [
+        5520,
+        -400
+      ],
       "id": "b1000000-0000-4000-8000-000000000028",
       "name": "WF-06: Submit Order",
       "onError": "continueRegularOutput"
@@ -315,7 +546,10 @@
       "parameters": {},
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [1200, 0],
+      "position": [
+        3600,
+        0
+      ],
       "id": "b1000000-0000-4000-8000-000000000005",
       "name": "No Attachments (skip)"
     },
@@ -323,7 +557,10 @@
       "parameters": {},
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [960, 100],
+      "position": [
+        3360,
+        112
+      ],
       "id": "b1000000-0000-4000-8000-000000000012",
       "name": "Sender Rejected"
     },
@@ -331,7 +568,10 @@
       "parameters": {},
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [1920, -100],
+      "position": [
+        4320,
+        -96
+      ],
       "id": "b1000000-0000-4000-8000-000000000030",
       "name": "Parse Failed"
     },
@@ -339,24 +579,89 @@
       "parameters": {},
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [3120, -200],
+      "position": [
+        5520,
+        -208
+      ],
       "id": "b1000000-0000-4000-8000-000000000031",
       "name": "Rejected / Changes Requested"
     },
     {
       "parameters": {
-        "resource": "message",
-        "operation": "update",
-        "messageId": "={{ $('Extract Email Metadata').item.json.emailId }}",
-        "updateFields": {
-          "isRead": true
+        "operation": "move",
+        "messageId": "={{ $input.first().json.id }}",
+        "folderId": {
+          "__rl": true,
+          "value": "AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l-fZwFAQBhdL-ANklNR6oMNJhB5iOiAAAB7sV-AAAA",
+          "mode": "list",
+          "cachedResultName": "Processing",
+          "cachedResultUrl": "https://outlook.office365.com/mail/AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l%2FfZwFAQBhdL%2FANklNR6oMNJhB5iOiAAAB7sV%2FAAAA"
         }
       },
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
-      "position": [3360, -100],
-      "id": "b1000000-0000-4000-8000-000000000013",
-      "name": "Mark as Read",
+      "position": [
+        0,
+        208
+      ],
+      "id": "b1000000-0000-4000-8000-000000000070",
+      "name": "Move to Processing",
+      "webhookId": "5e5b6faf-079f-4dcf-8ad8-64c8eca71145",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "jzzDNHXRz5JAGlpl",
+          "name": "Microsoft Outlook account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "messageId": "={{ $('Extract Email Metadata').item.json.emailId }}",
+        "folderId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "Processed"
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        5760,
+        -208
+      ],
+      "id": "b1000000-0000-4000-8000-000000000071",
+      "name": "Move to Processed",
+      "webhookId": "492e9eae-734a-4a72-9da8-b0c62db31f7c",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "",
+          "name": "Medika Preorders - Microsoft Outlook"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "messageId": "={{ $('Extract Email Metadata').item.json.emailId }}",
+        "folderId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "Error"
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        5760,
+        112
+      ],
+      "id": "b1000000-0000-4000-8000-000000000072",
+      "name": "Move to Error",
+      "webhookId": "fcc63d92-044d-45e8-870d-699d33661036",
       "credentials": {
         "microsoftOutlookOAuth2Api": {
           "id": "",
@@ -367,6 +672,135 @@
   ],
   "connections": {
     "New Email Received": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Move to Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Check ERP Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check ERP Token": {
+      "main": [
+        [
+          {
+            "node": "Token Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token Valid?": {
+      "main": [
+        [
+          {
+            "node": "Check Customer Cache",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Auth": {
+      "main": [
+        [
+          {
+            "node": "Fetch ERP Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch ERP Token": {
+      "main": [
+        [
+          {
+            "node": "Store ERP Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store ERP Token": {
+      "main": [
+        [
+          {
+            "node": "Check Customer Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Customer Cache": {
+      "main": [
+        [
+          {
+            "node": "Customers Cached?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Customers Cached?": {
+      "main": [
+        [
+          {
+            "node": "Extract Email Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Customers API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Customers API": {
+      "main": [
+        [
+          {
+            "node": "Store Customer Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Customer Cache": {
       "main": [
         [
           {
@@ -479,14 +913,14 @@
       "main": [
         [
           {
-            "node": "WF-04: Validate Articles",
+            "node": "WF-04: Validate Data",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "WF-04: Validate Articles": {
+    "WF-04: Validate Data": {
       "main": [
         [
           {
@@ -541,7 +975,7 @@
       "main": [
         [
           {
-            "node": "Mark as Read",
+            "node": "Move to Processed",
             "type": "main",
             "index": 0
           }
@@ -552,7 +986,7 @@
       "main": [
         [
           {
-            "node": "Mark as Read",
+            "node": "Move to Error",
             "type": "main",
             "index": 0
           }
@@ -563,7 +997,7 @@
       "main": [
         [
           {
-            "node": "Mark as Read",
+            "node": "Move to Error",
             "type": "main",
             "index": 0
           }
@@ -574,7 +1008,7 @@
       "main": [
         [
           {
-            "node": "Mark as Read",
+            "node": "Move to Error",
             "type": "main",
             "index": 0
           }
@@ -585,7 +1019,7 @@
       "main": [
         [
           {
-            "node": "Mark as Read",
+            "node": "Move to Processed",
             "type": "main",
             "index": 0
           }
@@ -593,13 +1027,10 @@
       ]
     }
   },
-  "active": false,
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "tags": [
-    {
-      "name": "medika-preorders"
-    }
-  ]
+  "tags": []
 }

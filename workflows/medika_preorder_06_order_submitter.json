@@ -14,7 +14,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Transform validated order lines to Medika API format\nconst input = $input.first().json;\nconst lines = input.validatedLines || [];\n\n// Build the order payload in expected API format\nconst orderPayload = {\n  orderDate: new Date().toISOString(),\n  senderEmail: input.senderEmail || '',\n  approvedBy: input.decidedBy || 'system',\n  approvalComments: input.comments || '',\n  lineItems: lines.map((line, idx) => ({\n    lineNumber: idx + 1,\n    drugCode: line.drugCode || (line.registryMatch ? line.registryMatch.code : null),\n    articleName: line.articleName || (line.registryMatch ? line.registryMatch.name : ''),\n    quantity: line.quantity,\n    unit: line.unit || 'kom',\n    matchStatus: line.matchStatus,\n    parseMethod: line.parseMethod,\n    pharmacyId: line.pharmacyId || null,\n    pharmacyName: line.pharmacyName || null\n  })),\n  totalLines: lines.length,\n  metadata: {\n    emailSubject: input.emailSubject || '',\n    processedAt: new Date().toISOString()\n  }\n};\n\nreturn [{\n  json: {\n    orderPayload: orderPayload\n  }\n}];\n"
+        "jsCode": "// Build Medika SaveTransferOrder request payload\nconst input = $input.first().json;\nconst config = input.config || {};\nconst lines = input.validatedLines || [];\n\nconst submittableLines = lines.filter(l => l.articleId && l.valid !== false);\nconst skippedLines = lines.filter(l => !l.articleId || l.valid === false);\n\nconst orderPayload = {\n  BusinessCenter: input.businessCenter || config.businessCenterDefault || '10',\n  Customer: input.customer || '',\n  DeliveryPlace: input.deliveryPlace || '',\n  CustomerOrderNumber: 'MP-' + (input.emailId || '').substring(0, 8) + '-' + Date.now(),\n  CustomerOrderDate: (input.receivedAt || new Date().toISOString()).split('T')[0],\n  Text: input.emailSubject || 'Prednarudžba',\n  Items: submittableLines.map(line => ({\n    ArticleID: String(line.articleId),\n    ArticleDescCustomer: line.articleName || '',\n    Quantity: parseFloat(line.quantity) || 0,\n    DiscountPerc: parseFloat(line.discountPerc) || 0.0,\n    Message: line.notes || ''\n  }))\n};\n\nreturn [{\n  json: {\n    config: config,\n    orderPayload: orderPayload,\n    submittedLineCount: submittableLines.length,\n    skippedLineCount: skippedLines.length,\n    skippedLines: skippedLines\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -24,84 +24,109 @@
     },
     {
       "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Check static data for a cached ERP token, fetch if expired\nconst staticData = $getWorkflowStaticData('global');\nconst input = $input.first().json;\nconst config = input.config || {};\n\nif (staticData.erpToken && staticData.erpTokenExpiresAt) {\n  const bufferMs = 5 * 60 * 1000;\n  if (Date.now() < (staticData.erpTokenExpiresAt - bufferMs)) {\n    return [{\n      json: {\n        ...input,\n        accessToken: staticData.erpToken,\n        tokenCacheHit: true\n      }\n    }];\n  }\n}\n\n// Token missing or expired — need to fetch\nreturn [{\n  json: {\n    ...input,\n    accessToken: null,\n    tokenCacheHit: false,\n    tokenUrl: config.erpApiUrl + '/Token',\n    tokenBody: 'grant_type=password&username=' + encodeURIComponent(config.erpUsername || '') + '&password=' + encodeURIComponent(config.erpPassword || '')\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 0],
+      "id": "f6000000-0000-4000-8000-000000000015",
+      "name": "Check Token Cache"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "d6000015-0000-4000-8000-000000000001", "leftValue": "={{ $json.tokenCacheHit }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [720, 0],
+      "id": "f6000000-0000-4000-8000-000000000016",
+      "name": "Token Valid?"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.tokenUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/x-www-form-urlencoded" }]
+        },
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "={{ $json.tokenBody }}",
+        "options": { "timeout": 15000 }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 200],
+      "id": "f6000000-0000-4000-8000-000000000011",
+      "name": "Fetch ERP Token"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Store fresh token in static data and merge with build result\nconst staticData = $getWorkflowStaticData('global');\nconst tokenResponse = $input.first().json;\nconst buildResult = $('Build API Payload').first().json;\n\nconst token = tokenResponse.access_token;\nif (!token) {\n  throw new Error('Failed to get ERP token: ' + JSON.stringify(tokenResponse));\n}\n\nlet expiresAt;\nif (tokenResponse['.expires']) {\n  expiresAt = new Date(tokenResponse['.expires']).getTime();\n} else if (tokenResponse.expires_in) {\n  expiresAt = Date.now() + (tokenResponse.expires_in * 1000);\n} else {\n  expiresAt = Date.now() + (60 * 60 * 1000);\n}\n\nstaticData.erpToken = token;\nstaticData.erpTokenExpiresAt = expiresAt;\n\nreturn [{\n  json: {\n    ...buildResult,\n    accessToken: token,\n    tokenCacheHit: false\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 200],
+      "id": "f6000000-0000-4000-8000-000000000017",
+      "name": "Store Token"
+    },
+    {
+      "parameters": {
         "method": "POST",
-        "url": "={{ $vars.MEDIKA_PREORDERS_ORDER_API_URL || 'https://webhook.site/mock-medika-order' }}",
+        "url": "={{ $json.config.erpApiUrl }}/api/SaveTransferOrder",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Authorization", "value": "=Bearer {{ $json.accessToken }}" }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.orderPayload) }}",
-        "options": {
-          "timeout": 30000
-        }
+        "options": { "timeout": 30000 }
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [480, 0],
+      "position": [1440, 0],
       "id": "f6000000-0000-4000-8000-000000000003",
       "name": "Submit Order to API"
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Process the API response\nconst apiResponse = $input.first().json;\nconst orderPayload = $('Build API Payload').first().json.orderPayload;\n\nreturn [{\n  json: {\n    submitted: true,\n    orderId: apiResponse.orderId || apiResponse.id || 'MOCK-' + Date.now(),\n    confirmationId: apiResponse.confirmationId || null,\n    apiResponse: apiResponse,\n    submittedAt: new Date().toISOString(),\n    lineCount: orderPayload.totalLines,\n    senderEmail: orderPayload.senderEmail\n  }\n}];\n"
+        "jsCode": "// Process Medika SaveTransferOrder response\nconst apiResponse = $input.first().json;\nconst buildResult = $('Build API Payload').first().json;\n\nreturn [{\n  json: {\n    submitted: true,\n    orderId: apiResponse.OrderID || null,\n    status: apiResponse.Status || null,\n    statusText: apiResponse.Status === 1 ? 'Received' : apiResponse.Status === 2 ? 'In process' : apiResponse.Status === 3 ? 'Processed' : 'Unknown',\n    customerOrderNumber: apiResponse.CustomerOrderNumber || buildResult.orderPayload.CustomerOrderNumber,\n    submittedLineCount: buildResult.submittedLineCount,\n    skippedLineCount: buildResult.skippedLineCount,\n    apiResponse: apiResponse,\n    submittedAt: new Date().toISOString()\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [720, 0],
+      "position": [1680, 0],
       "id": "f6000000-0000-4000-8000-000000000004",
       "name": "Process API Response"
     }
   ],
   "connections": {
-    "Sub-Workflow Input": {
+    "Sub-Workflow Input": { "main": [[{ "node": "Build API Payload", "type": "main", "index": 0 }]] },
+    "Build API Payload": { "main": [[{ "node": "Check Token Cache", "type": "main", "index": 0 }]] },
+    "Check Token Cache": { "main": [[{ "node": "Token Valid?", "type": "main", "index": 0 }]] },
+    "Token Valid?": {
       "main": [
-        [
-          {
-            "node": "Build API Payload",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Submit Order to API", "type": "main", "index": 0 }],
+        [{ "node": "Fetch ERP Token", "type": "main", "index": 0 }]
       ]
     },
-    "Build API Payload": {
-      "main": [
-        [
-          {
-            "node": "Submit Order to API",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Submit Order to API": {
-      "main": [
-        [
-          {
-            "node": "Process API Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
+    "Fetch ERP Token": { "main": [[{ "node": "Store Token", "type": "main", "index": 0 }]] },
+    "Store Token": { "main": [[{ "node": "Submit Order to API", "type": "main", "index": 0 }]] },
+    "Submit Order to API": { "main": [[{ "node": "Process API Response", "type": "main", "index": 0 }]] }
   },
   "active": false,
-  "settings": {
-    "executionOrder": "v1"
-  },
-  "tags": [
-    {
-      "name": "medika-preorders"
-    }
-  ]
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "medika-preorders" }]
 }

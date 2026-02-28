@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
 #
-# Deploy workflow JSON files to the n8n instance via REST API.
+# Deploy/pull workflow JSON files to/from the n8n instance via REST API.
 #
 # Usage:
 #   ./scripts/deploy-workflows.sh                  # deploy all medika_preorder workflows
-#   ./scripts/deploy-workflows.sh workflows/medika_preorder_00_error_handler.json  # deploy one
+#   ./scripts/deploy-workflows.sh workflows/foo.json  # deploy one
+#   ./scripts/deploy-workflows.sh pull              # pull all medika_preorder workflows
+#   ./scripts/deploy-workflows.sh pull workflows/foo.json  # pull one
 #
 # Requires:
-#   - jq
+#   - jq, python3
 #   - N8N_API_KEY env var (or set in .env) — generate in n8n Settings > API
 #   - N8N_API_URL env var (default: http://localhost:5678)
 #
 # Behavior:
-#   - If a workflow with the same name already exists, it updates it (PUT)
-#   - If no match is found, it creates a new workflow (POST)
+#   - deploy: If a workflow with the same name already exists, updates it (PUT).
+#             If no match, creates a new workflow (POST).
+#   - pull:   Fetches the workflow from n8n and writes it to the local JSON file,
+#             preserving UI-configured values (credentials, folder IDs, etc.).
 
 set -euo pipefail
 
@@ -52,6 +56,65 @@ if [ "$http_code" != "200" ]; then
   exit 1
 fi
 
+# ── Pull mode ────────────────────────────────────────────────────────
+if [ "${1:-}" = "pull" ]; then
+  shift
+  if [ $# -gt 0 ]; then
+    files=("$@")
+  else
+    files=(workflows/medika_preorder_*.json)
+  fi
+
+  echo "Pulling ${#files[@]} workflow(s) from n8n..."
+  echo ""
+
+  # Build name→id map
+  existing_map=$(curl -s "${N8N_API_URL}/api/v1/workflows?limit=100" \
+    -H "X-N8N-API-KEY: ${N8N_API_KEY}" | \
+    python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for w in data.get('data', []):
+    print(w['id'] + '\t' + w['name'])
+" 2>/dev/null || true)
+
+  pulled=0
+  for file in "${files[@]}"; do
+    filename=$(basename "$file")
+    workflow_name=$(jq -r '.name' "$file")
+    echo -n "  $filename ($workflow_name) ... "
+
+    existing_id=$(echo "$existing_map" | awk -F'\t' -v name="$workflow_name" '$2 == name { print $1; exit }')
+
+    if [ -z "$existing_id" ]; then
+      echo "NOT FOUND in n8n (skipped)"
+      continue
+    fi
+
+    # Fetch full workflow and clean up API-only fields
+    curl -s "${N8N_API_URL}/api/v1/workflows/${existing_id}" \
+      -H "X-N8N-API-KEY: ${N8N_API_KEY}" | \
+      python3 -c "
+import sys, json
+w = json.load(sys.stdin)
+# Keep only fields we track in git
+keep = {'name','nodes','connections','settings','tags','active'}
+out = {k: v for k, v in w.items() if k in keep}
+# Normalize: always set active=false in repo (activation is a runtime concern)
+out['active'] = False
+print(json.dumps(out, indent=2, ensure_ascii=False))
+" > "$file"
+
+    echo "PULLED (id: $existing_id)"
+    pulled=$((pulled + 1))
+  done
+
+  echo ""
+  echo "Done: $pulled pulled."
+  exit 0
+fi
+
+# ── Deploy mode ──────────────────────────────────────────────────────
 # Determine which files to deploy
 if [ $# -gt 0 ]; then
   files=("$@")
