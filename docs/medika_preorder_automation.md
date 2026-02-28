@@ -36,17 +36,19 @@ WF-06: Order Submitter        (POST to Medika Order API)
 ### Data Flow
 
 ```
-[Outlook Trigger] → [Config] → [Load Customer Cache] → [Sender Validation]
-       ↓                              ↓
-  audit: RECEIVED          (Customers2 API, 24h TTL)
-                                                            ↓
-                                                      [XLSX Parser] → [Data Validator]
-                                                                            ↓
-                                                               (cross-ref customer lookup)
-                                                                            ↓
-                                                              [Approval Gate (HITL)]
-                                                                            ↓
-                                                               [Order Submitter] → audit: COMPLETED
+[Outlook Trigger] ──→ [Config] → [ERP Token] → [Customer Cache] → [Sender Validation]
+       │                                                                    ↓
+       └──→ [Move to Processing]                              [Has Attachments?] → [XLSX Parser]
+            (parallel, fire-and-forget)                                                  ↓
+                                                                              [Data Validator]
+                                                                                     ↓
+                                                                          [Approval Gate (HITL)]
+                                                                            ↓              ↓
+                                                                      [Submit Order]   [Rejected]
+                                                                            ↓              ↓
+                                                                    [Move to Processed]  [Move to Processed]
+
+Error paths (invalid sender, no attachments, parse failed) → [Move to Error]
 ```
 
 Each sub-workflow has "Continue On Fail" enabled at the orchestrator level, so failures are handled gracefully (log + notify) rather than crashing the pipeline.
@@ -67,17 +69,23 @@ Each sub-workflow has "Continue On Fail" enabled at the orchestrator level, so f
   - Swappable to IMAP or Gmail Trigger if provider changes — only the trigger node changes
 - **Config**: Code node reads all env vars (`MEDIKA_ERP_URL`, `MEDIKA_ERP_USERNAME`, `MEDIKA_ERP_PASSWORD`, notification emails) and sets non-sensitive defaults (business center, discount, feature flags). Single source of truth — edit here to switch between dev and prod.
 - **Customer Cache**: Loads customer/delivery-place registry from Medika's `Customers2` API into n8n Static Data with a configurable TTL (default 24h). On cache hit, builds lookup maps from stored data. On cache miss, authenticates via OAuth2 and fetches fresh data. See [Customer Registry Cache](#customer-registry-cache) below.
+- **Email tracking**: Folder-based state tracking via Outlook folder moves (not mark-as-read):
+  - **Immediately on trigger**: email moved from Inbox → `Processing` folder (parallel branch, fire-and-forget)
+  - **On success** (order submitted or intentionally rejected): moved to `Processed` folder
+  - **On error** (invalid sender, no attachments, parse failure): moved to `Processing Error` folder
+  - Trigger is configured with `foldersToInclude: [Inbox]` so moved emails are never re-polled
 - **Flow**:
-  1. Config node loads environment variables
-  2. Check Customer Cache → fetch from `Customers2` API if stale
-  3. Extract email metadata (sender, subject, attachments)
-  4. Call WF-02 (sender validation) — if invalid, mark as read + stop
-  5. Check attachments exist — if none, mark as read + stop
-  6. Call WF-03 (XLSX parser) — parse attachment(s)
-  7. Call WF-04 (data validation) — cross-reference against customer lookup
-  8. Call WF-05 (approval gate) — execution pauses here
-  9. If approved: call WF-06 (submit order)
-  10. Mark email as read in Outlook
+  1. Config node loads environment variables + Move to Processing (parallel)
+  2. Check ERP Token → fetch OAuth2 token if expired
+  3. Check Customer Cache → fetch from `Customers2` API if stale
+  4. Extract email metadata (sender, subject, attachments)
+  5. Call WF-02 (sender validation) — if invalid → Move to Error
+  6. Check attachments exist — if none → Move to Error
+  7. Call WF-03 (XLSX parser) — if parse fails → Move to Error
+  8. Call WF-04 (data validation) — cross-reference against customer lookup
+  9. Call WF-05 (approval gate) — execution pauses here
+  10. If approved: call WF-06 (submit order) → Move to Processed
+  11. If rejected: → Move to Processed
 
 ## WF-02: Sender Validation
 
@@ -221,13 +229,17 @@ This reduces parsing complexity over time. The system works without it, but adop
 
 - **Pattern**: Wait node with "Resume: On Form Submitted" (HITL pattern)
 - **Flow**:
-  1. Build HTML summary of the order (table with line items, match statuses, flags)
-  2. Email summary + approval link (`{{ $resumeWebhookUrl }}`) to `$vars.APPROVAL_NOTIFY_EMAIL`
+  1. Build HTML summary table with line items, validation status, customer info, parse method
+     - Valid lines: green background, checkmark
+     - Invalid lines (errors): red background, shows error messages
+     - Warning lines: yellow background, shows warnings
+     - AI-extracted lines: blue background, flagged for careful review
+  2. Email summary + approval link (`{{ $resumeWebhookUrl }}`) to `config.approvalNotifyEmail`
   3. Wait node pauses execution (state persisted to DB)
-  4. Approver clicks link → sees form with: Decision (Approve/Reject/Request Changes), Comments
-  5. On submit: execution resumes, routes by decision
-- **Timeout**: 48 hours (configurable). On timeout → escalation email to `$vars.ESCALATION_NOTIFY_EMAIL`, log `APPROVAL_TIMEOUT`
-- **Phase 2 enhancement**: Auto-approve for all-EXACT_MATCH + trusted sender. Send confirmation email to sender.
+  4. Approver clicks link → sees public form (no n8n login required): Decision (Approve/Reject/Request Changes) + Comments
+  5. On submit: execution resumes, Process Decision passes all data through to orchestrator (config, validatedLines, customer, deliveryPlace, businessCenter, emailId, etc.)
+- **Timeout**: 48 hours (configurable). On timeout → escalation email, log `APPROVAL_TIMEOUT`
+- **Phase 2 enhancement**: Auto-approve for all-valid + trusted sender. Send confirmation email to sender.
 
 **Requires n8n v2.0+** for Wait nodes to work correctly inside sub-workflows.
 
@@ -586,9 +598,11 @@ A demo-ready system with a test inbox, mock APIs, and AI parsing is achievable i
 | 9 | Orchestrator wiring (WF-03→06) | — | 0.5h | Replace TODO NoOps, add Prepare Input nodes, binary re-attachment. |
 | 10 | Deploy script fixes | — | 1h | .env export, jq control chars, JSON body corruption, PUT vs POST. |
 | 11 | Customer registry cache (Customers2 API) | — | 0.5h | Static Data cache with TTL, OAuth2 auth, lookup maps, WF-04 cross-ref. |
-| 12 | Integration testing + fixes | 2-3h | | End-to-end with test emails |
-| 13 | Standard XLSX template | 0.5h | | Simple Excel file |
-| | **Total** | **~17-21h** | **~6h** | Tasks 4-11 done. E2E testing + template remaining. |
+| 12 | ERP token caching + folder-based email tracking | — | 0.5h | Token cache in orchestrator + WF-06. Outlook folder moves (Processing/Processed/Error) replace mark-as-read. |
+| 13 | WF-05 fixes + deploy pull command | — | 0.5h | Updated HTML summary fields, config refs, data passthrough. Added `pull` to deploy script. |
+| 14 | Integration testing + fixes | 2-3h | | End-to-end with test emails |
+| 15 | Standard XLSX template | 0.5h | | Simple Excel file |
+| | **Total** | **~17-21h** | **~7h** | Tasks 4-13 done. E2E testing + template remaining. |
 
 **Demo scope**: Test email account → parse XLSX (rule-based + AI fallback) → validate against mock data → approval form → submit to Medika test API (`testnar.medika.hr`). Happy path + basic error handling + AI parsing wow factor.
 
@@ -631,6 +645,28 @@ workflows/medika_preorder_template.xlsx
 ```
 
 Update `.gitignore` to track these: `!workflows/medika_preorder_**`
+
+### Deploy Script
+
+`scripts/deploy-workflows.sh` — deploys and pulls workflow JSON files via n8n REST API.
+
+```bash
+# Deploy all medika workflows
+./scripts/deploy-workflows.sh
+
+# Deploy a specific workflow
+./scripts/deploy-workflows.sh workflows/medika_preorder_01_orchestrator.json
+
+# Pull all workflows (saves UI-configured values: credentials, folder IDs, sub-workflow IDs)
+./scripts/deploy-workflows.sh pull
+
+# Pull a specific workflow
+./scripts/deploy-workflows.sh pull workflows/medika_preorder_01_orchestrator.json
+```
+
+**Workflow after UI changes**: Edit in n8n UI → `pull` to save to git → future `deploy` preserves those values.
+
+**What pull saves**: credential references (name + ID), folder IDs, node positions, sub-workflow bindings — everything configured via the UI. Secrets stay in n8n's encrypted credential store and never touch git.
 
 ---
 

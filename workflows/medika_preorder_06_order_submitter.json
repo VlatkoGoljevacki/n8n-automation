@@ -1,5 +1,6 @@
 {
   "name": "[medika-preorders] WF-06: Order Submitter",
+  "active": false,
   "nodes": [
     {
       "parameters": {
@@ -7,7 +8,10 @@
       },
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
-      "position": [0, 0],
+      "position": [
+        0,
+        0
+      ],
       "id": "f6000000-0000-4000-8000-000000000001",
       "name": "Sub-Workflow Input"
     },
@@ -18,7 +22,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [240, 0],
+      "position": [
+        240,
+        0
+      ],
       "id": "f6000000-0000-4000-8000-000000000002",
       "name": "Build API Payload"
     },
@@ -29,22 +36,42 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [480, 0],
+      "position": [
+        480,
+        0
+      ],
       "id": "f6000000-0000-4000-8000-000000000015",
       "name": "Check Token Cache"
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
-          "conditions": [{ "id": "d6000015-0000-4000-8000-000000000001", "leftValue": "={{ $json.tokenCacheHit }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "d6000015-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.tokenCacheHit }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
           "combinator": "and"
         },
         "options": {}
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [720, 0],
+      "position": [
+        720,
+        0
+      ],
       "id": "f6000000-0000-4000-8000-000000000016",
       "name": "Token Valid?"
     },
@@ -54,16 +81,26 @@
         "url": "={{ $json.tokenUrl }}",
         "sendHeaders": true,
         "headerParameters": {
-          "parameters": [{ "name": "Content-Type", "value": "application/x-www-form-urlencoded" }]
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
         },
         "sendBody": true,
         "specifyBody": "string",
         "body": "={{ $json.tokenBody }}",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [960, 200],
+      "position": [
+        960,
+        200
+      ],
       "id": "f6000000-0000-4000-8000-000000000011",
       "name": "Fetch ERP Token"
     },
@@ -74,7 +111,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, 200],
+      "position": [
+        1200,
+        200
+      ],
       "id": "f6000000-0000-4000-8000-000000000017",
       "name": "Store Token"
     },
@@ -85,18 +125,29 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Authorization", "value": "=Bearer {{ $json.accessToken }}" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.accessToken }}"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.orderPayload) }}",
-        "options": { "timeout": 30000 }
+        "options": {
+          "timeout": 30000
+        }
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1440, 0],
+      "position": [
+        1440,
+        0
+      ],
       "id": "f6000000-0000-4000-8000-000000000003",
       "name": "Submit Order to API"
     },
@@ -107,26 +158,104 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1680, 0],
+      "position": [
+        1680,
+        0
+      ],
       "id": "f6000000-0000-4000-8000-000000000004",
       "name": "Process API Response"
     }
   ],
   "connections": {
-    "Sub-Workflow Input": { "main": [[{ "node": "Build API Payload", "type": "main", "index": 0 }]] },
-    "Build API Payload": { "main": [[{ "node": "Check Token Cache", "type": "main", "index": 0 }]] },
-    "Check Token Cache": { "main": [[{ "node": "Token Valid?", "type": "main", "index": 0 }]] },
-    "Token Valid?": {
+    "Sub-Workflow Input": {
       "main": [
-        [{ "node": "Submit Order to API", "type": "main", "index": 0 }],
-        [{ "node": "Fetch ERP Token", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Build API Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Fetch ERP Token": { "main": [[{ "node": "Store Token", "type": "main", "index": 0 }]] },
-    "Store Token": { "main": [[{ "node": "Submit Order to API", "type": "main", "index": 0 }]] },
-    "Submit Order to API": { "main": [[{ "node": "Process API Response", "type": "main", "index": 0 }]] }
+    "Build API Payload": {
+      "main": [
+        [
+          {
+            "node": "Check Token Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Token Cache": {
+      "main": [
+        [
+          {
+            "node": "Token Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token Valid?": {
+      "main": [
+        [
+          {
+            "node": "Submit Order to API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch ERP Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch ERP Token": {
+      "main": [
+        [
+          {
+            "node": "Store Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Token": {
+      "main": [
+        [
+          {
+            "node": "Submit Order to API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Order to API": {
+      "main": [
+        [
+          {
+            "node": "Process API Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "active": false,
-  "settings": { "executionOrder": "v1" },
-  "tags": [{ "name": "medika-preorders" }]
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": []
 }

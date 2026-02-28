@@ -40,10 +40,82 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Environment config — single source of truth for all workflows.\n// Edit here to switch between dev and prod.\n// ============================================================\nconst erpUser = process.env.MEDIKA_ERP_USERNAME || '';\nconst erpPass = process.env.MEDIKA_ERP_PASSWORD || '';\n\nif (!erpUser || !erpPass) {\n  throw new Error('MEDIKA_ERP_USERNAME and MEDIKA_ERP_PASSWORD env vars are required');\n}\n\nreturn [{\n  json: {\n    config: {\n      erpApiUrl: process.env.MEDIKA_ERP_URL || 'https://testnar.medika.hr',\n      erpUsername: erpUser,\n      erpPassword: erpPass,\n      businessCenterDefault: '10',\n      defaultDiscountPerc: 0.0,\n      customersApiPath: '/api/Customers2',\n      customerCacheTTLHours: 24,\n      approvalNotifyEmail: process.env.MEDIKA_PREORDERS_APPROVAL_EMAIL || '',\n      errorNotifyEmail: process.env.MEDIKA_PREORDERS_ERROR_EMAIL || '',\n      parseHtmlBody: false,\n      aiParsingEnabled: true\n    }\n  },\n  binary: $input.first().binary\n}];\n"
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-001",
+              "name": "erpApiUrl",
+              "value": "={{ $env.MEDIKA_ERP_URL }}",
+              "type": "string"
+            },
+            {
+              "id": "cfg-002",
+              "name": "erpUsername",
+              "value": "={{ $env.MEDIKA_ERP_USERNAME }}",
+              "type": "string"
+            },
+            {
+              "id": "cfg-003",
+              "name": "erpPassword",
+              "value": "={{ $env.MEDIKA_ERP_PASSWORD }}",
+              "type": "string"
+            },
+            {
+              "id": "cfg-004",
+              "name": "businessCenterDefault",
+              "value": "10",
+              "type": "string"
+            },
+            {
+              "id": "cfg-005",
+              "name": "defaultDiscountPerc",
+              "value": "0",
+              "type": "number"
+            },
+            {
+              "id": "cfg-006",
+              "name": "customersApiPath",
+              "value": "/api/Customers2",
+              "type": "string"
+            },
+            {
+              "id": "cfg-007",
+              "name": "customerCacheTTLHours",
+              "value": "24",
+              "type": "number"
+            },
+            {
+              "id": "cfg-008",
+              "name": "approvalNotifyEmail",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "cfg-009",
+              "name": "errorNotifyEmail",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "cfg-010",
+              "name": "parseHtmlBody",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "cfg-011",
+              "name": "aiParsingEnabled",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {
+          "includeBinary": true
+        }
       },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
       "position": [
         240,
         0
@@ -53,7 +125,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Check static data for a valid (non-expired) ERP token\nconst staticData = $getWorkflowStaticData('global');\nconst config = $input.first().json.config;\n\nif (staticData.erpToken && staticData.erpTokenExpiresAt) {\n  const bufferMs = 5 * 60 * 1000; // refresh 5 min before expiry\n  if (Date.now() < (staticData.erpTokenExpiresAt - bufferMs)) {\n    return [{\n      json: { config, erpToken: staticData.erpToken, tokenCacheHit: true },\n      binary: $input.first().binary\n    }];\n  }\n}\n\n// Token missing or expired\nreturn [{\n  json: { config, erpToken: null, tokenCacheHit: false },\n  binary: $input.first().binary\n}];\n"
+        "jsCode": "// Check static data for a valid (non-expired) ERP token\nconst staticData = $getWorkflowStaticData('global');\n\nif (staticData.erpToken && staticData.erpTokenExpiresAt) {\n  const bufferMs = 5 * 60 * 1000;\n  if (Date.now() < (staticData.erpTokenExpiresAt - bufferMs)) {\n    return [{ json: { erpToken: staticData.erpToken, tokenCacheHit: true }, binary: $input.first().binary }];\n  }\n}\n\nreturn [{ json: { erpToken: null, tokenCacheHit: false }, binary: $input.first().binary }];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -98,7 +170,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build OAuth2 token request\nconst input = $input.first();\nconst config = input.json.config;\n\nreturn [{\n  json: {\n    config,\n    tokenUrl: config.erpApiUrl + '/Token',\n    tokenBody: 'grant_type=password&username=' + encodeURIComponent(config.erpUsername) + '&password=' + encodeURIComponent(config.erpPassword)\n  },\n  binary: input.binary\n}];\n"
+        "jsCode": "// Build OAuth2 token request\nconst config = $('Config').first().json;\n\nreturn [{\n  json: {\n    tokenUrl: config.erpApiUrl + '/Token',\n    tokenBody: 'grant_type=password&username=' + encodeURIComponent(config.erpUsername) + '&password=' + encodeURIComponent(config.erpPassword)\n  },\n  binary: $input.first().binary\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -139,7 +211,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Store ERP token in static data with expiry\nconst staticData = $getWorkflowStaticData('global');\nconst tokenResponse = $input.first().json;\nconst config = $('Prepare Auth').first().json.config;\n\nconst token = tokenResponse.access_token;\nif (!token) {\n  throw new Error('Failed to get ERP token: ' + JSON.stringify(tokenResponse));\n}\n\n// Parse expiry from token response\nlet expiresAt;\nif (tokenResponse['.expires']) {\n  expiresAt = new Date(tokenResponse['.expires']).getTime();\n} else if (tokenResponse.expires_in) {\n  expiresAt = Date.now() + (tokenResponse.expires_in * 1000);\n} else {\n  expiresAt = Date.now() + (60 * 60 * 1000); // 1h default\n}\n\nstaticData.erpToken = token;\nstaticData.erpTokenExpiresAt = expiresAt;\n\nreturn [{\n  json: { config, erpToken: token, tokenCacheHit: false },\n  binary: $('Check ERP Token').first().binary\n}];\n"
+        "jsCode": "// Store ERP token in static data with expiry\nconst staticData = $getWorkflowStaticData('global');\nconst tokenResponse = $input.first().json;\n\nconst token = tokenResponse.access_token;\nif (!token) {\n  throw new Error('Failed to get ERP token: ' + JSON.stringify(tokenResponse));\n}\n\nlet expiresAt;\nif (tokenResponse['.expires']) {\n  expiresAt = new Date(tokenResponse['.expires']).getTime();\n} else if (tokenResponse.expires_in) {\n  expiresAt = Date.now() + (tokenResponse.expires_in * 1000);\n} else {\n  expiresAt = Date.now() + (60 * 60 * 1000);\n}\n\nstaticData.erpToken = token;\nstaticData.erpTokenExpiresAt = expiresAt;\n\nreturn [{ json: { erpToken: token, tokenCacheHit: false }, binary: $('Check ERP Token').first().binary }];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -152,7 +224,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Check if customer list is cached in static data\nconst staticData = $getWorkflowStaticData('global');\nconst input = $input.first().json;\nconst config = input.config;\nconst erpToken = input.erpToken;\nconst TTL = (config.customerCacheTTLHours || 24) * 60 * 60 * 1000;\nconst now = Date.now();\n\nif (staticData.customers && staticData.customersLoadedAt && (now - staticData.customersLoadedAt) < TTL) {\n  // Cache hit — build lookup maps\n  const customerById = {};\n  const deliveryPlaceById = {};\n\n  for (const c of staticData.customers) {\n    customerById[c.ID] = {\n      name: c.Name || (c.Name1 + ' ' + (c.Name2 || '')).trim(),\n      name1: c.Name1, name2: c.Name2, oib: c.OIB,\n      city: c.City, postCode: c.PostCode, street: c.Street\n    };\n    if (c.DeliveryPlaces) {\n      for (const dp of c.DeliveryPlaces) {\n        deliveryPlaceById[dp.ID] = {\n          customerId: c.ID, customerName: c.Name1,\n          name: dp.Name || (dp.Name1 + ' ' + (dp.Name2 || '')).trim(),\n          name1: dp.Name1, name2: dp.Name2,\n          city: dp.City, postCode: dp.PostCode, street: dp.Street\n        };\n      }\n    }\n  }\n\n  return [{\n    json: {\n      config, erpToken,\n      customerCacheHit: true,\n      customerLookup: {\n        customerById, deliveryPlaceById,\n        totalCustomers: Object.keys(customerById).length,\n        totalDeliveryPlaces: Object.keys(deliveryPlaceById).length,\n        loadedAt: new Date(staticData.customersLoadedAt).toISOString(),\n        source: 'cache'\n      }\n    },\n    binary: $input.first().binary\n  }];\n}\n\n// Cache miss\nreturn [{\n  json: { config, erpToken, customerCacheHit: false, customerLookup: null },\n  binary: $input.first().binary\n}];\n"
+        "jsCode": "// Check if customer list is cached in static data\nconst staticData = $getWorkflowStaticData('global');\nconst config = $('Config').first().json;\nconst erpToken = $input.first().json.erpToken;\nconst TTL = (config.customerCacheTTLHours || 24) * 60 * 60 * 1000;\n\nif (staticData.customers && staticData.customersLoadedAt && (Date.now() - staticData.customersLoadedAt) < TTL) {\n  const customerById = {};\n  const deliveryPlaceById = {};\n\n  for (const c of staticData.customers) {\n    customerById[c.ID] = {\n      name: c.Name || (c.Name1 + ' ' + (c.Name2 || '')).trim(),\n      name1: c.Name1, name2: c.Name2, oib: c.OIB,\n      city: c.City, postCode: c.PostCode, street: c.Street\n    };\n    if (c.DeliveryPlaces) {\n      for (const dp of c.DeliveryPlaces) {\n        deliveryPlaceById[dp.ID] = {\n          customerId: c.ID, customerName: c.Name1,\n          name: dp.Name || (dp.Name1 + ' ' + (dp.Name2 || '')).trim(),\n          name1: dp.Name1, name2: dp.Name2,\n          city: dp.City, postCode: dp.PostCode, street: dp.Street\n        };\n      }\n    }\n  }\n\n  return [{\n    json: {\n      erpToken,\n      customerCacheHit: true,\n      customerLookup: { customerById, deliveryPlaceById,\n        totalCustomers: Object.keys(customerById).length,\n        totalDeliveryPlaces: Object.keys(deliveryPlaceById).length,\n        loadedAt: new Date(staticData.customersLoadedAt).toISOString(),\n        source: 'cache'\n      }\n    },\n    binary: $input.first().binary\n  }];\n}\n\nreturn [{ json: { erpToken, customerCacheHit: false, customerLookup: null }, binary: $input.first().binary }];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -197,7 +269,7 @@
     },
     {
       "parameters": {
-        "url": "={{ $json.config.erpApiUrl + $json.config.customersApiPath }}",
+        "url": "={{ $('Config').first().json.erpApiUrl + $('Config').first().json.customersApiPath }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -222,7 +294,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Store fetched customer list in static data and build lookup maps\nconst staticData = $getWorkflowStaticData('global');\nconst items = $input.all();\nconst cacheInput = $('Check Customer Cache').first().json;\nconst config = cacheInput.config;\nconst erpToken = cacheInput.erpToken;\n\nconst customers = items.map(item => item.json);\nstaticData.customers = customers;\nstaticData.customersLoadedAt = Date.now();\n\nconst customerById = {};\nconst deliveryPlaceById = {};\n\nfor (const c of customers) {\n  customerById[c.ID] = {\n    name: c.Name || (c.Name1 + ' ' + (c.Name2 || '')).trim(),\n    name1: c.Name1, name2: c.Name2, oib: c.OIB,\n    city: c.City, postCode: c.PostCode, street: c.Street\n  };\n  if (c.DeliveryPlaces) {\n    for (const dp of c.DeliveryPlaces) {\n      deliveryPlaceById[dp.ID] = {\n        customerId: c.ID, customerName: c.Name1,\n        name: dp.Name || (dp.Name1 + ' ' + (dp.Name2 || '')).trim(),\n        name1: dp.Name1, name2: dp.Name2,\n        city: dp.City, postCode: dp.PostCode, street: dp.Street\n      };\n    }\n  }\n}\n\nreturn [{\n  json: {\n    config, erpToken,\n    customerCacheHit: false,\n    customerLookup: {\n      customerById, deliveryPlaceById,\n      totalCustomers: Object.keys(customerById).length,\n      totalDeliveryPlaces: Object.keys(deliveryPlaceById).length,\n      loadedAt: new Date(staticData.customersLoadedAt).toISOString(),\n      source: 'api'\n    }\n  },\n  binary: $('Check Customer Cache').first().binary\n}];\n"
+        "jsCode": "// Store fetched customer list in static data and build lookup maps\nconst staticData = $getWorkflowStaticData('global');\nconst items = $input.all();\nconst erpToken = $('Check Customer Cache').first().json.erpToken;\n\nconst customers = items.map(item => item.json);\nstaticData.customers = customers;\nstaticData.customersLoadedAt = Date.now();\n\nconst customerById = {};\nconst deliveryPlaceById = {};\n\nfor (const c of customers) {\n  customerById[c.ID] = {\n    name: c.Name || (c.Name1 + ' ' + (c.Name2 || '')).trim(),\n    name1: c.Name1, name2: c.Name2, oib: c.OIB,\n    city: c.City, postCode: c.PostCode, street: c.Street\n  };\n  if (c.DeliveryPlaces) {\n    for (const dp of c.DeliveryPlaces) {\n      deliveryPlaceById[dp.ID] = {\n        customerId: c.ID, customerName: c.Name1,\n        name: dp.Name || (dp.Name1 + ' ' + (dp.Name2 || '')).trim(),\n        name1: dp.Name1, name2: dp.Name2,\n        city: dp.City, postCode: dp.PostCode, street: dp.Street\n      };\n    }\n  }\n}\n\nreturn [{\n  json: {\n    erpToken,\n    customerCacheHit: false,\n    customerLookup: { customerById, deliveryPlaceById,\n      totalCustomers: Object.keys(customerById).length,\n      totalDeliveryPlaces: Object.keys(deliveryPlaceById).length,\n      loadedAt: new Date(staticData.customersLoadedAt).toISOString(),\n      source: 'api'\n    }\n  },\n  binary: $('Check Customer Cache').first().binary\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -365,7 +437,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Re-attach binary data and carry config + customer data from WF-02\nconst emailMeta = $('Extract Email Metadata').first();\nconst sv = $('WF-02: Validate Sender').first().json;\nconst config = $('Config').first().json.config;\n\nreturn [{\n  json: {\n    config: config,\n    senderEmail: emailMeta.json.senderEmail,\n    emailSubject: emailMeta.json.emailSubject,\n    emailId: emailMeta.json.emailId,\n    receivedAt: emailMeta.json.receivedAt,\n    senderName: sv.senderName || '',\n    customer: sv.customer || null,\n    deliveryPlace: sv.deliveryPlace || null,\n    businessCenter: sv.businessCenter || config.businessCenterDefault,\n    defaultDiscountPerc: sv.defaultDiscountPerc || config.defaultDiscountPerc\n  },\n  binary: emailMeta.binary\n}];\n"
+        "jsCode": "// Re-attach binary data and carry config + customer data from WF-02\nconst emailMeta = $('Extract Email Metadata').first();\nconst sv = $('WF-02: Validate Sender').first().json;\nconst config = $('Config').first().json;\n\nreturn [{\n  json: {\n    config: config,\n    senderEmail: emailMeta.json.senderEmail,\n    emailSubject: emailMeta.json.emailSubject,\n    emailId: emailMeta.json.emailId,\n    receivedAt: emailMeta.json.receivedAt,\n    senderName: sv.senderName || '',\n    customer: sv.customer || null,\n    deliveryPlace: sv.deliveryPlace || null,\n    businessCenter: sv.businessCenter || config.businessCenterDefault,\n    defaultDiscountPerc: sv.defaultDiscountPerc || config.defaultDiscountPerc\n  },\n  binary: emailMeta.binary\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -429,7 +501,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Prepare input for data validation with customer lookup\nconst parseResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json.config;\n\n// Get customer lookup from whichever cache path was taken\nconst cacheCheck = $('Check Customer Cache').first().json;\nlet customerLookup = cacheCheck.customerLookup;\nif (!customerLookup) {\n  customerLookup = $('Store Customer Cache').first().json.customerLookup;\n}\n\nreturn [{\n  json: {\n    config: config,\n    orderLines: parseResult.orderLines || [],\n    lineCount: parseResult.lineCount || 0,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    customer: parserInput.customer,\n    deliveryPlace: parserInput.deliveryPlace,\n    defaultDiscountPerc: parserInput.defaultDiscountPerc,\n    customerLookup: customerLookup\n  }\n}];\n"
+        "jsCode": "// Prepare input for data validation with customer lookup\nconst parseResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json;\n\n// Get customer lookup from whichever cache path was taken\nconst cacheCheck = $('Check Customer Cache').first().json;\nlet customerLookup = cacheCheck.customerLookup;\nif (!customerLookup) {\n  customerLookup = $('Store Customer Cache').first().json.customerLookup;\n}\n\nreturn [{\n  json: {\n    config: config,\n    orderLines: parseResult.orderLines || [],\n    lineCount: parseResult.lineCount || 0,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    customer: parserInput.customer,\n    deliveryPlace: parserInput.deliveryPlace,\n    defaultDiscountPerc: parserInput.defaultDiscountPerc,\n    customerLookup: customerLookup\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -461,7 +533,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Merge validation results with config + customer context for approval\nconst validationResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json.config;\n\n// Get customer lookup\nconst cacheCheck = $('Check Customer Cache').first().json;\nlet customerLookup = cacheCheck.customerLookup;\nif (!customerLookup) {\n  customerLookup = $('Store Customer Cache').first().json.customerLookup;\n}\n\nreturn [{\n  json: {\n    config: config,\n    ...validationResult,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    customer: parserInput.customer,\n    deliveryPlace: parserInput.deliveryPlace,\n    businessCenter: parserInput.businessCenter,\n    customerLookup: customerLookup\n  }\n}];\n"
+        "jsCode": "// Merge validation results with config + customer context for approval\nconst validationResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json;\n\n// Get customer lookup\nconst cacheCheck = $('Check Customer Cache').first().json;\nlet customerLookup = cacheCheck.customerLookup;\nif (!customerLookup) {\n  customerLookup = $('Store Customer Cache').first().json.customerLookup;\n}\n\nreturn [{\n  json: {\n    config: config,\n    ...validationResult,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    customer: parserInput.customer,\n    deliveryPlace: parserInput.deliveryPlace,\n    businessCenter: parserInput.businessCenter,\n    customerLookup: customerLookup\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -621,9 +693,10 @@
         "messageId": "={{ $('Extract Email Metadata').item.json.emailId }}",
         "folderId": {
           "__rl": true,
+          "value": "AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l-fZwFAQBhdL-ANklNR6oMNJhB5iOiAAAB7sV_AAAA",
           "mode": "list",
-          "value": "",
-          "cachedResultName": "Processed"
+          "cachedResultName": "Processed",
+          "cachedResultUrl": "https://outlook.office365.com/mail/AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l%2FfZwFAQBhdL%2FANklNR6oMNJhB5iOiAAAB7sV_AAAA"
         }
       },
       "type": "n8n-nodes-base.microsoftOutlook",
@@ -637,8 +710,8 @@
       "webhookId": "492e9eae-734a-4a72-9da8-b0c62db31f7c",
       "credentials": {
         "microsoftOutlookOAuth2Api": {
-          "id": "",
-          "name": "Medika Preorders - Microsoft Outlook"
+          "id": "jzzDNHXRz5JAGlpl",
+          "name": "Microsoft Outlook account"
         }
       }
     },
@@ -648,9 +721,10 @@
         "messageId": "={{ $('Extract Email Metadata').item.json.emailId }}",
         "folderId": {
           "__rl": true,
+          "value": "AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l-fZwFAQBhdL-ANklNR6oMNJhB5iOiAAAB7sWAAAAA",
           "mode": "list",
-          "value": "",
-          "cachedResultName": "Error"
+          "cachedResultName": "Error",
+          "cachedResultUrl": "https://outlook.office365.com/mail/AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l%2FfZwFAQBhdL%2FANklNR6oMNJhB5iOiAAAB7sWAAAAA"
         }
       },
       "type": "n8n-nodes-base.microsoftOutlook",
@@ -664,8 +738,8 @@
       "webhookId": "fcc63d92-044d-45e8-870d-699d33661036",
       "credentials": {
         "microsoftOutlookOAuth2Api": {
-          "id": "",
-          "name": "Medika Preorders - Microsoft Outlook"
+          "id": "jzzDNHXRz5JAGlpl",
+          "name": "Microsoft Outlook account"
         }
       }
     }

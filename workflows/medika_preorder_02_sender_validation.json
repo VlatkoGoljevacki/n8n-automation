@@ -1,5 +1,6 @@
 {
   "name": "[medika-preorders] WF-02: Sender Validation",
+  "active": false,
   "nodes": [
     {
       "parameters": {
@@ -7,7 +8,10 @@
       },
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
-      "position": [0, 0],
+      "position": [
+        0,
+        0
+      ],
       "id": "e2000000-0000-4000-8000-000000000001",
       "name": "Sub-Workflow Input"
     },
@@ -18,7 +22,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0],
+      "position": [
+        220,
+        0
+      ],
       "id": "e2000000-0000-4000-8000-000000000002",
       "name": "Validate Sender"
     }
@@ -36,13 +43,10 @@
       ]
     }
   },
-  "active": false,
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "tags": [
-    {
-      "name": "medika-preorders"
-    }
-  ]
+  "tags": []
 }

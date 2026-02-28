@@ -1,5 +1,6 @@
 {
   "name": "[medika-preorders] WF-03: XLSX Parser",
+  "active": false,
   "nodes": [
     {
       "parameters": {
@@ -7,7 +8,10 @@
       },
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
-      "position": [0, 0],
+      "position": [
+        0,
+        0
+      ],
       "id": "f3000000-0000-4000-8000-000000000001",
       "name": "Sub-Workflow Input"
     },
@@ -18,7 +22,10 @@
       },
       "type": "n8n-nodes-base.spreadsheetFile",
       "typeVersion": 2,
-      "position": [240, 0],
+      "position": [
+        240,
+        0
+      ],
       "id": "f3000000-0000-4000-8000-000000000002",
       "name": "Parse XLSX"
     },
@@ -29,7 +36,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [480, 0],
+      "position": [
+        480,
+        0
+      ],
       "id": "f3000000-0000-4000-8000-000000000003",
       "name": "Detect Columns & Normalize"
     },
@@ -58,7 +68,10 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [720, 0],
+      "position": [
+        720,
+        0
+      ],
       "id": "f3000000-0000-4000-8000-000000000004",
       "name": "Detection Succeeded?"
     },
@@ -69,7 +82,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [960, 100],
+      "position": [
+        960,
+        100
+      ],
       "id": "f3000000-0000-4000-8000-000000000005",
       "name": "Prepare AI Prompt"
     },
@@ -97,7 +113,10 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1200, 100],
+      "position": [
+        1200,
+        100
+      ],
       "id": "f3000000-0000-4000-8000-000000000006",
       "name": "LLM: Extract Order Lines"
     },
@@ -108,7 +127,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1440, 100],
+      "position": [
+        1440,
+        100
+      ],
       "id": "f3000000-0000-4000-8000-000000000007",
       "name": "Parse AI Response"
     },
@@ -122,7 +144,10 @@
       },
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
-      "position": [1680, 0],
+      "position": [
+        1680,
+        0
+      ],
       "id": "f3000000-0000-4000-8000-000000000008",
       "name": "Merge Results"
     }
@@ -213,13 +238,10 @@
       ]
     }
   },
-  "active": false,
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "tags": [
-    {
-      "name": "medika-preorders"
-    }
-  ]
+  "tags": []
 }
