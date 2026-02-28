@@ -32,7 +32,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Check static data for a cached ERP token, fetch if expired\nconst staticData = $getWorkflowStaticData('global');\nconst input = $input.first().json;\nconst config = input.config || {};\n\nif (staticData.erpToken && staticData.erpTokenExpiresAt) {\n  const bufferMs = 5 * 60 * 1000;\n  if (Date.now() < (staticData.erpTokenExpiresAt - bufferMs)) {\n    return [{\n      json: {\n        ...input,\n        accessToken: staticData.erpToken,\n        tokenCacheHit: true\n      }\n    }];\n  }\n}\n\n// Token missing or expired — need to fetch\nreturn [{\n  json: {\n    ...input,\n    accessToken: null,\n    tokenCacheHit: false,\n    tokenUrl: config.erpApiUrl + '/Token',\n    tokenBody: 'grant_type=password&username=' + encodeURIComponent(config.erpUsername || '') + '&password=' + encodeURIComponent(config.erpPassword || '')\n  }\n}];\n"
+        "jsCode": "// Check for token: 1) from parent workflow input, 2) from own static data, 3) fetch fresh\nconst staticData = $getWorkflowStaticData('global');\nconst input = $input.first().json;\nconst config = input.config || {};\n\n// Priority 1: Token passed from orchestrator\nif (input.accessToken) {\n  return [{\n    json: {\n      ...input,\n      accessToken: input.accessToken,\n      tokenCacheHit: true\n    }\n  }];\n}\n\n// Priority 2: Own static data cache\nif (staticData.erpToken && staticData.erpTokenExpiresAt) {\n  const bufferMs = 5 * 60 * 1000;\n  if (Date.now() < (staticData.erpTokenExpiresAt - bufferMs)) {\n    return [{\n      json: {\n        ...input,\n        accessToken: staticData.erpToken,\n        tokenCacheHit: true\n      }\n    }];\n  }\n}\n\n// Priority 3: Need to fetch fresh token\nreturn [{\n  json: {\n    ...input,\n    accessToken: null,\n    tokenCacheHit: false,\n    tokenUrl: config.erpApiUrl + '/Token',\n    tokenBody: 'grant_type=password&username=' + encodeURIComponent(config.erpUsername || '') + '&password=' + encodeURIComponent(config.erpPassword || '')\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -77,7 +77,7 @@
     },
     {
       "parameters": {
-        "method": "GET",
+        "method": "POST",
         "url": "={{ $json.tokenUrl }}",
         "sendHeaders": true,
         "headerParameters": {

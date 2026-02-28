@@ -17,11 +17,11 @@
     },
     {
       "parameters": {
-        "operation": "fromFile",
+        "operation": "xlsx",
         "options": {}
       },
-      "type": "n8n-nodes-base.spreadsheetFile",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
       "position": [
         240,
         0
@@ -32,7 +32,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const items = $input.all();\n\nconst KNOWN_HEADERS = {\n  drugCode: ['sifra', 'šifra', 'code', 'artikl_sifra', 'drug_code', 'product_code', 'šifra artikla', 'sifra artikla', 'šifra proizvoda', 'sifra proizvoda', 'rbr'],\n  articleName: ['naziv', 'name', 'artikl', 'proizvod', 'naziv_artikla', 'opis', 'naziv artikla', 'description'],\n  quantity: ['kolicina', 'količina', 'qty', 'kom', 'amount', 'naručeno', 'kol', 'naruceno'],\n  pharmacyId: ['ljekarna_id', 'pharmacy_id', 'kupac', 'id_ljekarne', 'šifra ljekarne', 'sifra ljekarne'],\n  pharmacyName: ['ljekarna', 'naziv_ljekarne', 'kupac_naziv', 'naziv ljekarne'],\n  unit: ['jedinica', 'mjera', 'jm', 'unit'],\n  notes: ['napomena', 'komentar', 'notes', 'comment']\n};\n\nif (items.length === 0) {\n  return [{ json: { matched: false, error: 'No data in spreadsheet', orderLines: [] } }];\n}\n\n// Get column headers from the parsed spreadsheet\nconst headers = Object.keys(items[0].json);\nconst mapping = {};\n\nfor (const [field, patterns] of Object.entries(KNOWN_HEADERS)) {\n  for (const header of headers) {\n    const normalized = header.toLowerCase().trim()\n      .replace(/[^a-z0-9šđčćžs ]/gi, '')\n      .trim();\n    if (patterns.some(p => normalized === p || normalized.includes(p))) {\n      mapping[field] = header;\n      break;\n    }\n  }\n}\n\nconst hasDrugId = mapping.drugCode || mapping.articleName;\nconst hasQuantity = mapping.quantity;\n\nif (!hasDrugId || !hasQuantity) {\n  // Rule-based detection failed — return raw data for AI fallback\n  return [{\n    json: {\n      matched: false,\n      headers: headers,\n      mapping: mapping,\n      rawData: items.slice(0, 50).map(item => item.json),\n      orderLines: []\n    }\n  }];\n}\n\n// Normalize to canonical format\nconst orderLines = items.map((item, idx) => {\n  const row = item.json;\n  const qty = mapping.quantity ? Number(row[mapping.quantity]) || 0 : 0;\n  if (qty <= 0) return null; // skip empty rows\n\n  return {\n    sourceSheet: 'Sheet1',\n    sourceRow: idx + 2,\n    pharmacyId: mapping.pharmacyId ? String(row[mapping.pharmacyId] || '') : null,\n    pharmacyName: mapping.pharmacyName ? String(row[mapping.pharmacyName] || '') : null,\n    drugCode: mapping.drugCode ? String(row[mapping.drugCode] || '') : null,\n    articleName: mapping.articleName ? String(row[mapping.articleName] || '') : null,\n    quantity: qty,\n    unit: mapping.unit ? String(row[mapping.unit] || 'kom') : 'kom',\n    notes: mapping.notes ? String(row[mapping.notes] || '') : '',\n    parseMethod: 'RULE_BASED',\n    parseConfidence: 1.0,\n    rawData: row\n  };\n}).filter(Boolean);\n\nreturn [{\n  json: {\n    matched: true,\n    mapping: mapping,\n    lineCount: orderLines.length,\n    orderLines: orderLines\n  }\n}];\n"
+        "jsCode": "const items = $input.all();\n\nconst KNOWN_HEADERS = {\n  drugCode: ['šifra proizvoda', 'sifra proizvoda', 'šifra artikla', 'sifra artikla', 'artikl_sifra', 'drug_code', 'product_code', 'šifra', 'sifra', 'code', 'rbr'],\n  articleName: ['naziv proizvoda', 'naziv artikla', 'naziv_artikla', 'artikl', 'proizvod', 'opis', 'naziv', 'name', 'description'],\n  quantity: ['količina', 'kolicina', 'qty', 'kom', 'amount', 'naručeno', 'naruceno', 'kol'],\n  pharmacyId: ['šifra primatelja', 'sifra primatelja', 'šifra ljekarne', 'sifra ljekarne', 'ljekarna_id', 'pharmacy_id', 'id_ljekarne', 'kupac'],\n  pharmacyName: ['naziv ljekarne', 'naziv_ljekarne', 'kupac_naziv', 'naziv 1', 'ljekarna'],\n  unit: ['jedinica', 'mjera', 'jm', 'unit'],\n  discount: ['rabat', 'popust', 'discount'],\n  notes: ['napomena', 'komentar', 'notes', 'comment']\n};\n\nif (items.length === 0) {\n  return [{ json: { matched: false, error: 'No data in spreadsheet', orderLines: [] } }];\n}\n\n// Get column headers from the parsed spreadsheet\nconst headers = Object.keys(items[0].json);\nconst mapping = {};\nconst usedHeaders = new Set();\n\n// Normalize a header string\nfunction norm(s) {\n  return s.toLowerCase().trim().replace(/[^a-z0-9šđčćžs ]/gi, '').trim();\n}\n\n// Pass 1: exact matches only (longer patterns listed first = more specific)\nfor (const [field, patterns] of Object.entries(KNOWN_HEADERS)) {\n  if (mapping[field]) continue;\n  for (const header of headers) {\n    if (usedHeaders.has(header)) continue;\n    const normalized = norm(header);\n    if (patterns.some(p => normalized === p)) {\n      mapping[field] = header;\n      usedHeaders.add(header);\n      break;\n    }\n  }\n}\n\n// Pass 2: partial (includes) matches for remaining unmapped fields\nfor (const [field, patterns] of Object.entries(KNOWN_HEADERS)) {\n  if (mapping[field]) continue;\n  for (const header of headers) {\n    if (usedHeaders.has(header)) continue;\n    const normalized = norm(header);\n    if (patterns.some(p => normalized.includes(p))) {\n      mapping[field] = header;\n      usedHeaders.add(header);\n      break;\n    }\n  }\n}\n\nconst hasDrugId = mapping.drugCode || mapping.articleName;\nconst hasQuantity = mapping.quantity;\n\nif (!hasDrugId || !hasQuantity) {\n  // Rule-based detection failed — return raw data for AI fallback\n  return [{\n    json: {\n      matched: false,\n      headers: headers,\n      mapping: mapping,\n      rawData: items.slice(0, 50).map(item => item.json),\n      orderLines: []\n    }\n  }];\n}\n\n// Normalize to canonical format\nconst orderLines = items.map((item, idx) => {\n  const row = item.json;\n  const qty = mapping.quantity ? Number(row[mapping.quantity]) || 0 : 0;\n  if (qty <= 0) return null; // skip empty rows\n\n  return {\n    sourceSheet: 'Sheet1',\n    sourceRow: idx + 2,\n    pharmacyId: mapping.pharmacyId ? String(row[mapping.pharmacyId] || '') : null,\n    pharmacyName: mapping.pharmacyName ? String(row[mapping.pharmacyName] || '') : null,\n    drugCode: mapping.drugCode ? String(row[mapping.drugCode] || '') : null,\n    articleName: mapping.articleName ? String(row[mapping.articleName] || '') : null,\n    quantity: qty,\n    unit: mapping.unit ? String(row[mapping.unit] || 'kom') : 'kom',\n    discount: mapping.discount ? (Number(row[mapping.discount]) || 0) : null,\n    notes: mapping.notes ? String(row[mapping.notes] || '') : '',\n    parseMethod: 'RULE_BASED',\n    parseConfidence: 1.0,\n    rawData: row\n  };\n}).filter(Boolean);\n\nreturn [{\n  json: {\n    matched: true,\n    mapping: mapping,\n    lineCount: orderLines.length,\n    orderLines: orderLines\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -78,7 +78,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Prepare CSV representation of raw data for LLM\nconst input = $input.first().json;\nconst headers = input.headers || [];\nconst rawData = input.rawData || [];\n\nif (rawData.length === 0) {\n  return [{ json: { ...input, aiParsed: false, error: 'No raw data for AI parsing' } }];\n}\n\n// Convert to CSV text\nlet csv = headers.join(',') + '\\n';\nfor (const row of rawData) {\n  csv += headers.map(h => {\n    const val = String(row[h] || '');\n    return val.includes(',') ? `\"${val}\"` : val;\n  }).join(',') + '\\n';\n}\n\nconst prompt = `You are a data extraction assistant. Below is spreadsheet data containing pharmacy drug orders from Croatia. Extract each order line as a JSON object with these fields: drugCode, articleName, quantity, unit, pharmacyId, pharmacyName. If a field is not present, set it to null. The quantity must be a number. Return ONLY a valid JSON array. No other text.\n\nData:\n${csv}`;\n\nreturn [{\n  json: {\n    ...input,\n    aiPrompt: prompt\n  }\n}];\n"
+        "jsCode": "// Prepare CSV representation of raw data for LLM\nconst input = $input.first().json;\nconst headers = input.headers || [];\nconst rawData = input.rawData || [];\n\nif (rawData.length === 0) {\n  return [{ json: { ...input, aiParsed: false, error: 'No raw data for AI parsing' } }];\n}\n\n// Convert to CSV text\nlet csv = headers.join(',') + '\\n';\nfor (const row of rawData) {\n  csv += headers.map(h => {\n    const val = String(row[h] || '');\n    return val.includes(',') ? `\"${val}\"` : val;\n  }).join(',') + '\\n';\n}\n\nconst prompt = `You are a data extraction assistant. Below is spreadsheet data containing pharmacy drug orders from Croatia. Extract each order line as a JSON object with these fields: drugCode, articleName, quantity, unit, pharmacyId, pharmacyName, discount (percentage as a number, e.g. 10 for 10%). If a field is not present, set it to null. The quantity must be a number. Return ONLY a valid JSON array. No other text.\n\nData:\n${csv}`;\n\nreturn [{\n  json: {\n    ...input,\n    aiPrompt: prompt\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -123,7 +123,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Parse LLM response into canonical order lines\nconst input = $input.first().json;\nlet aiText = '';\n\ntry {\n  aiText = input.content[0].text;\n} catch (e) {\n  return [{ json: { matched: false, error: 'Failed to parse LLM response', orderLines: [] } }];\n}\n\n// Extract JSON array from response (handle markdown code blocks)\nlet jsonStr = aiText.trim();\nif (jsonStr.startsWith('```')) {\n  jsonStr = jsonStr.replace(/^```(?:json)?\\n?/, '').replace(/\\n?```$/, '');\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(jsonStr);\n} catch (e) {\n  return [{ json: { matched: false, error: `Invalid JSON from LLM: ${e.message}`, rawResponse: aiText, orderLines: [] } }];\n}\n\nif (!Array.isArray(parsed)) {\n  return [{ json: { matched: false, error: 'LLM did not return an array', rawResponse: aiText, orderLines: [] } }];\n}\n\nconst orderLines = parsed.map((item, idx) => ({\n  sourceSheet: 'Sheet1',\n  sourceRow: idx + 1,\n  pharmacyId: item.pharmacyId || null,\n  pharmacyName: item.pharmacyName || null,\n  drugCode: item.drugCode ? String(item.drugCode) : null,\n  articleName: item.articleName ? String(item.articleName) : null,\n  quantity: Number(item.quantity) || 0,\n  unit: item.unit || 'kom',\n  notes: '',\n  parseMethod: 'AI_EXTRACTED',\n  parseConfidence: 0.7,\n  rawData: item\n})).filter(line => line.quantity > 0);\n\nreturn [{\n  json: {\n    matched: true,\n    lineCount: orderLines.length,\n    orderLines: orderLines\n  }\n}];\n"
+        "jsCode": "// Parse LLM response into canonical order lines\nconst input = $input.first().json;\nlet aiText = '';\n\ntry {\n  aiText = input.content[0].text;\n} catch (e) {\n  return [{ json: { matched: false, error: 'Failed to parse LLM response', orderLines: [] } }];\n}\n\n// Extract JSON array from response (handle markdown code blocks)\nlet jsonStr = aiText.trim();\nif (jsonStr.startsWith('```')) {\n  jsonStr = jsonStr.replace(/^```(?:json)?\\n?/, '').replace(/\\n?```$/, '');\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(jsonStr);\n} catch (e) {\n  return [{ json: { matched: false, error: `Invalid JSON from LLM: ${e.message}`, rawResponse: aiText, orderLines: [] } }];\n}\n\nif (!Array.isArray(parsed)) {\n  return [{ json: { matched: false, error: 'LLM did not return an array', rawResponse: aiText, orderLines: [] } }];\n}\n\nconst orderLines = parsed.map((item, idx) => ({\n  sourceSheet: 'Sheet1',\n  sourceRow: idx + 1,\n  pharmacyId: item.pharmacyId || null,\n  pharmacyName: item.pharmacyName || null,\n  drugCode: item.drugCode ? String(item.drugCode) : null,\n  articleName: item.articleName ? String(item.articleName) : null,\n  quantity: Number(item.quantity) || 0,\n  unit: item.unit || 'kom',\n  discount: item.discount != null ? (Number(item.discount) || 0) : null,\n  notes: '',\n  parseMethod: 'AI_EXTRACTED',\n  parseConfidence: 0.7,\n  rawData: item\n})).filter(line => line.quantity > 0);\n\nreturn [{\n  json: {\n    matched: true,\n    lineCount: orderLines.length,\n    orderLines: orderLines\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -133,23 +133,6 @@
       ],
       "id": "f3000000-0000-4000-8000-000000000007",
       "name": "Parse AI Response"
-    },
-    {
-      "parameters": {
-        "mode": "multiplex",
-        "mergeByFields": {
-          "values": []
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3,
-      "position": [
-        1680,
-        0
-      ],
-      "id": "f3000000-0000-4000-8000-000000000008",
-      "name": "Merge Results"
     }
   ],
   "connections": {
@@ -188,13 +171,7 @@
     },
     "Detection Succeeded?": {
       "main": [
-        [
-          {
-            "node": "Merge Results",
-            "type": "main",
-            "index": 0
-          }
-        ],
+        [],
         [
           {
             "node": "Prepare AI Prompt",
@@ -222,17 +199,6 @@
             "node": "Parse AI Response",
             "type": "main",
             "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse AI Response": {
-      "main": [
-        [
-          {
-            "node": "Merge Results",
-            "type": "main",
-            "index": 1
           }
         ]
       ]

@@ -183,6 +183,7 @@
     },
     {
       "parameters": {
+        "method": "POST",
         "url": "={{ $json.tokenUrl }}",
         "sendHeaders": true,
         "headerParameters": {
@@ -312,31 +313,31 @@
             {
               "id": "c1000001-0000-4000-8000-000000000002",
               "name": "senderEmail",
-              "value": "={{ $('New Email Received').item.json.from.emailAddress.address }}",
+              "value": "={{ $('New Email Received').first().json.from.emailAddress.address }}",
               "type": "string"
             },
             {
               "id": "c1000001-0000-4000-8000-000000000004",
               "name": "emailSubject",
-              "value": "={{ $('New Email Received').item.json.subject }}",
+              "value": "={{ $('New Email Received').first().json.subject }}",
               "type": "string"
             },
             {
               "id": "c1000001-0000-4000-8000-000000000005",
               "name": "emailId",
-              "value": "={{ $('New Email Received').item.json.id }}",
+              "value": "={{ $('New Email Received').first().json.id }}",
               "type": "string"
             },
             {
               "id": "c1000001-0000-4000-8000-000000000006",
               "name": "hasAttachments",
-              "value": "={{ $('New Email Received').item.json.hasAttachments }}",
+              "value": "={{ $('New Email Received').first().json.hasAttachments }}",
               "type": "boolean"
             },
             {
               "id": "c1000001-0000-4000-8000-000000000007",
               "name": "receivedAt",
-              "value": "={{ $('New Email Received').item.json.receivedDateTime }}",
+              "value": "={{ $('New Email Received').first().json.receivedDateTime }}",
               "type": "string"
             }
           ]
@@ -356,8 +357,8 @@
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "mode": "list",
-          "value": ""
+          "mode": "id",
+          "value": "htd4mmeSLhFXW2W9"
         },
         "options": {}
       },
@@ -437,7 +438,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Re-attach binary data and carry config + customer data from WF-02\nconst emailMeta = $('Extract Email Metadata').first();\nconst sv = $('WF-02: Validate Sender').first().json;\nconst config = $('Config').first().json;\n\nreturn [{\n  json: {\n    config: config,\n    senderEmail: emailMeta.json.senderEmail,\n    emailSubject: emailMeta.json.emailSubject,\n    emailId: emailMeta.json.emailId,\n    receivedAt: emailMeta.json.receivedAt,\n    senderName: sv.senderName || '',\n    customer: sv.customer || null,\n    deliveryPlace: sv.deliveryPlace || null,\n    businessCenter: sv.businessCenter || config.businessCenterDefault,\n    defaultDiscountPerc: sv.defaultDiscountPerc || config.defaultDiscountPerc\n  },\n  binary: emailMeta.binary\n}];\n"
+        "jsCode": "// Re-attach binary data from trigger and carry config + customer data\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst sv = $('WF-02: Validate Sender').first().json;\nconst config = $('Config').first().json;\n\n// Get binary directly from trigger node (binary gets dropped by Set/IF/Execute nodes)\nconst binary = $('New Email Received').first().binary || {};\nconst binaryKeys = Object.keys(binary);\nconst renamedBinary = {};\nif (binaryKeys.length > 0) {\n  // Rename first attachment to 'data' for Spreadsheet File node\n  renamedBinary.data = binary[binaryKeys[0]];\n  for (let i = 1; i < binaryKeys.length; i++) {\n    renamedBinary[binaryKeys[i]] = binary[binaryKeys[i]];\n  }\n}\n\nreturn [{\n  json: {\n    config: config,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    senderName: sv.senderName || '',\n    customer: sv.customer || null,\n    deliveryPlace: sv.deliveryPlace || null,\n    businessCenter: sv.businessCenter || config.businessCenterDefault,\n    defaultDiscountPerc: sv.defaultDiscountPerc || config.defaultDiscountPerc\n  },\n  binary: renamedBinary\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -452,8 +453,8 @@
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "mode": "list",
-          "value": ""
+          "mode": "id",
+          "value": "tu3iR5DJRA1oAEv6"
         },
         "options": {}
       },
@@ -516,8 +517,8 @@
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "mode": "list",
-          "value": ""
+          "mode": "id",
+          "value": "GtoJqRCiEqFehc84"
         },
         "options": {}
       },
@@ -533,7 +534,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Merge validation results with config + customer context for approval\nconst validationResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json;\n\n// Get customer lookup\nconst cacheCheck = $('Check Customer Cache').first().json;\nlet customerLookup = cacheCheck.customerLookup;\nif (!customerLookup) {\n  customerLookup = $('Store Customer Cache').first().json.customerLookup;\n}\n\nreturn [{\n  json: {\n    config: config,\n    ...validationResult,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    customer: parserInput.customer,\n    deliveryPlace: parserInput.deliveryPlace,\n    businessCenter: parserInput.businessCenter,\n    customerLookup: customerLookup\n  }\n}];\n"
+        "jsCode": "// Merge validation results with config for approval (no customerLookup — too large, not needed after validation)\nconst validationResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json;\n\n// Strip rawData from validated lines to reduce payload size\nconst cleanedLines = (validationResult.validatedLines || []).map(line => {\n  const { rawData, ...rest } = line;\n  return rest;\n});\n\nreturn [{\n  json: {\n    config: config,\n    validated: validationResult.validated,\n    lineCount: validationResult.lineCount,\n    summary: validationResult.summary,\n    validatedLines: cleanedLines,\n    invalidLines: (validationResult.invalidLines || []).map(line => {\n      const { rawData, ...rest } = line;\n      return rest;\n    }),\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    customer: parserInput.customer,\n    deliveryPlace: parserInput.deliveryPlace,\n    businessCenter: parserInput.businessCenter\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -548,8 +549,8 @@
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "mode": "list",
-          "value": ""
+          "mode": "id",
+          "value": "XJknI06WpDQhSDT3"
         },
         "options": {}
       },
@@ -597,17 +598,30 @@
     },
     {
       "parameters": {
+        "jsCode": "// Pass ERP token from orchestrator's static data to WF-06\nconst staticData = $getWorkflowStaticData('global');\nconst approvalResult = $input.first().json;\nconst config = approvalResult.config || $('Config').first().json;\n\nlet erpToken = null;\nif (staticData.erpToken && staticData.erpTokenExpiresAt) {\n  const bufferMs = 5 * 60 * 1000;\n  if (Date.now() < (staticData.erpTokenExpiresAt - bufferMs)) {\n    erpToken = staticData.erpToken;\n  }\n}\n\nreturn [{\n  json: {\n    ...approvalResult,\n    accessToken: erpToken,\n    config: config\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5520,
+        -400
+      ],
+      "id": "b1000000-0000-4000-8000-000000000032",
+      "name": "Prepare Submission Input"
+    },
+    {
+      "parameters": {
         "workflowId": {
           "__rl": true,
-          "mode": "list",
-          "value": ""
+          "mode": "id",
+          "value": "oxQuEAdjRAlJXhLg"
         },
         "options": {}
       },
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        5520,
+        5760,
         -400
       ],
       "id": "b1000000-0000-4000-8000-000000000028",
@@ -656,7 +670,7 @@
         -208
       ],
       "id": "b1000000-0000-4000-8000-000000000031",
-      "name": "Rejected / Changes Requested"
+      "name": "Rejected"
     },
     {
       "parameters": {
@@ -702,7 +716,7 @@
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        5760,
+        6000,
         -208
       ],
       "id": "b1000000-0000-4000-8000-000000000071",
@@ -1031,14 +1045,25 @@
       "main": [
         [
           {
-            "node": "WF-06: Submit Order",
+            "node": "Prepare Submission Input",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Rejected / Changes Requested",
+            "node": "Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Submission Input": {
+      "main": [
+        [
+          {
+            "node": "WF-06: Submit Order",
             "type": "main",
             "index": 0
           }
@@ -1089,7 +1114,7 @@
         ]
       ]
     },
-    "Rejected / Changes Requested": {
+    "Rejected": {
       "main": [
         [
           {
