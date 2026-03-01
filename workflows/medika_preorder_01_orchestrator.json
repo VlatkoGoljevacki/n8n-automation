@@ -26,7 +26,7 @@
       "type": "n8n-nodes-base.microsoftOutlookTrigger",
       "typeVersion": 1,
       "position": [
-        0,
+        -544,
         0
       ],
       "id": "b1000000-0000-4000-8000-000000000001",
@@ -456,6 +456,14 @@
           "mode": "id",
           "value": "tu3iR5DJRA1oAEv6"
         },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
         "options": {}
       },
       "type": "n8n-nodes-base.executeWorkflow",
@@ -474,7 +482,8 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict"
+            "typeValidation": "strict",
+            "version": 1
           },
           "conditions": [
             {
@@ -673,26 +682,36 @@
       "name": "Rejected"
     },
     {
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        0
+      ],
+      "id": "b1000000-0000-4000-8000-000000000080",
+      "name": "Process 1 Email"
+    },
+    {
       "parameters": {
-        "operation": "move",
-        "messageId": "={{ $input.first().json.id }}",
-        "folderId": {
+        "operation": "update",
+        "messageId": {
           "__rl": true,
-          "value": "AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l-fZwFAQBhdL-ANklNR6oMNJhB5iOiAAAB7sV-AAAA",
-          "mode": "list",
-          "cachedResultName": "Processing",
-          "cachedResultUrl": "https://outlook.office365.com/mail/AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l%2FfZwFAQBhdL%2FANklNR6oMNJhB5iOiAAAB7sV%2FAAAA"
+          "value": "={{ $input.first().json.id }}",
+          "mode": "id"
+        },
+        "updateFields": {
+          "isRead": true
         }
       },
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        0,
-        208
+        -16,
+        0
       ],
       "id": "b1000000-0000-4000-8000-000000000070",
-      "name": "Move to Processing",
-      "webhookId": "5e5b6faf-079f-4dcf-8ad8-64c8eca71145",
+      "name": "Mark as Read",
       "credentials": {
         "microsoftOutlookOAuth2Api": {
           "id": "jzzDNHXRz5JAGlpl",
@@ -735,6 +754,34 @@
         "messageId": "={{ $('Extract Email Metadata').item.json.emailId }}",
         "folderId": {
           "__rl": true,
+          "value": "AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l-fZwFAQBhdL-ANklNR6oMNJhB5iOiAAAB7sWGAAAA",
+          "mode": "list",
+          "cachedResultName": "Invalid",
+          "cachedResultUrl": "https://outlook.office365.com/mail/AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l%2FfZwFAQBhdL%2FANklNR6oMNJhB5iOiAAAB7sWGAAAA"
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        208
+      ],
+      "id": "b1000000-0000-4000-8000-000000000073",
+      "name": "Move to Invalid",
+      "webhookId": "c02ab9ca-cecf-43e0-a8a3-5ba0cfccee68",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "jzzDNHXRz5JAGlpl",
+          "name": "Microsoft Outlook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "messageId": "={{ $('Extract Email Metadata').item.json.emailId }}",
+        "folderId": {
+          "__rl": true,
           "value": "AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l-fZwFAQBhdL-ANklNR6oMNJhB5iOiAAAB7sWAAAAA",
           "mode": "list",
           "cachedResultName": "Error",
@@ -763,12 +810,29 @@
       "main": [
         [
           {
-            "node": "Config",
+            "node": "Process 1 Email",
             "type": "main",
             "index": 0
-          },
+          }
+        ]
+      ]
+    },
+    "Process 1 Email": {
+      "main": [
+        [
           {
-            "node": "Move to Processing",
+            "node": "Mark as Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark as Read": {
+      "main": [
+        [
+          {
+            "node": "Config",
             "type": "main",
             "index": 0
           }
@@ -1096,7 +1160,7 @@
       "main": [
         [
           {
-            "node": "Move to Error",
+            "node": "Move to Invalid",
             "type": "main",
             "index": 0
           }

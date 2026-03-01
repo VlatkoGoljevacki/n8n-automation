@@ -31,7 +31,7 @@
     {
       "parameters": {
         "toRecipients": "vlatko.goljevacki@gmail.com",
-        "subject": "=Pre-Order Approval: {{ $json.senderEmail }} ({{ $json.lineCount }} lines)",
+        "subject": "=Pre-Order Approval: {{ $json.senderEmail }} ({{ $json.lineCount }} lines) — {{ $json.receivedAt ? new Date($json.receivedAt).toLocaleDateString('hr-HR') : '' }}",
         "bodyContent": "={{ $json.approvalHtml + '<br><p><a href=\"' + $execution.resumeFormUrl + '\" style=\"display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;\">Review &amp; Approve</a></p>' }}",
         "additionalFields": {
           "bodyContentType": "html"
