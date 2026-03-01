@@ -668,6 +668,50 @@ Update `.gitignore` to track these: `!workflows/medika_preorder_**`
 
 **What pull saves**: credential references (name + ID), folder IDs, node positions, sub-workflow bindings — everything configured via the UI. Secrets stay in n8n's encrypted credential store and never touch git.
 
+### CI/CD Deployment (Planned)
+
+The deploy script is API-based and can run in any CI/CD pipeline. Example GitHub Actions step:
+
+```yaml
+- name: Deploy workflows to staging
+  env:
+    N8N_API_URL: ${{ secrets.N8N_STAGING_API_URL }}
+    N8N_API_KEY: ${{ secrets.N8N_STAGING_API_KEY }}
+  run: bash scripts/deploy-workflows.sh
+```
+
+**Multi-environment setup**: Use separate `N8N_API_URL` + `N8N_API_KEY` per environment (staging, production). Each n8n instance has its own credentials and sub-workflow IDs, so after first deploy to a new environment, run `pull` to capture those bindings.
+
+**Suggested pipeline flow**:
+1. PR merged to `main` → auto-deploy to staging
+2. Manual approval gate → deploy to production
+3. Post-deploy: activate workflows via API if needed (`PUT /api/v1/workflows/{id}/activate`)
+
+### Workflow Versioning (n8n 2.0+)
+
+n8n has built-in draft/published versioning:
+
+- **Every save** creates a new draft version — drafts are NOT live.
+- **Production executions** always run the currently **published** version.
+- **Publishing** explicitly promotes a draft to production.
+- **Version history** allows restoring previous versions or unpublishing.
+- **Named versions** (Pro/Enterprise) let you tag milestones with meaningful names and descriptions.
+
+This means UI edits are safe — they stay in draft until someone publishes.
+
+**API caveat**: `PUT /api/v1/workflows/{id}` bypasses draft/published and updates the live version directly. There is no draft-only API update yet ([feature request pending](https://community.n8n.io/t/feature-request-api-support-for-updating-workflows-as-draft-without-auto-publishing/259961)). This means our deploy script pushes changes straight to production. For safety, use a staging environment for testing and only deploy to production after verification.
+
+### Access Control
+
+| Approach | Tier | What it does |
+|---|---|---|
+| Draft/Published versioning | Community+ | UI edits stay in draft, production is protected |
+| RBAC (read-only roles) | Enterprise | Restrict who can edit or publish per workflow |
+| Source control sync | Enterprise | One-way git→n8n sync, UI edits blocked |
+| Limit UI access | Community | Only admins access n8n UI; all changes via git + deploy |
+
+**Current recommendation**: Rely on draft/published versioning (already built-in) + git as source of truth. UI edits stay in draft and don't affect production. Use `pull` to capture any UI changes back to git before deploying.
+
 ---
 
 ## Troubleshooting & Lessons Learned
