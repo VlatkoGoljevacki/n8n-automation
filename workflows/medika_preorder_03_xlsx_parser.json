@@ -31,7 +31,6 @@
     },
     {
       "parameters": {
-        "mode": "runOnceForAllItems",
         "jsCode": "const items = $input.all();\n\nconst KNOWN_HEADERS = {\n  drugCode: ['šifra proizvoda', 'sifra proizvoda', 'šifra artikla', 'sifra artikla', 'artikl_sifra', 'drug_code', 'product_code', 'šifra', 'sifra', 'code', 'rbr'],\n  articleName: ['naziv proizvoda', 'naziv artikla', 'naziv_artikla', 'artikl', 'proizvod', 'opis', 'naziv', 'name', 'description'],\n  quantity: ['količina', 'kolicina', 'qty', 'kom', 'amount', 'naručeno', 'naruceno', 'kol'],\n  pharmacyId: ['šifra primatelja', 'sifra primatelja', 'šifra ljekarne', 'sifra ljekarne', 'ljekarna_id', 'pharmacy_id', 'id_ljekarne', 'kupac'],\n  pharmacyName: ['naziv ljekarne', 'naziv_ljekarne', 'kupac_naziv', 'naziv 1', 'ljekarna'],\n  unit: ['jedinica', 'mjera', 'jm', 'unit'],\n  discount: ['rabat', 'popust', 'discount'],\n  notes: ['napomena', 'komentar', 'notes', 'comment']\n};\n\nif (items.length === 0) {\n  return [{ json: { matched: false, error: 'No data in spreadsheet', orderLines: [] } }];\n}\n\n// Get column headers from the parsed spreadsheet\nconst headers = Object.keys(items[0].json);\nconst mapping = {};\nconst usedHeaders = new Set();\n\n// Normalize a header string\nfunction norm(s) {\n  return s.toLowerCase().trim().replace(/[^a-z0-9šđčćžs ]/gi, '').trim();\n}\n\n// Pass 1: exact matches only (longer patterns listed first = more specific)\nfor (const [field, patterns] of Object.entries(KNOWN_HEADERS)) {\n  if (mapping[field]) continue;\n  for (const header of headers) {\n    if (usedHeaders.has(header)) continue;\n    const normalized = norm(header);\n    if (patterns.some(p => normalized === p)) {\n      mapping[field] = header;\n      usedHeaders.add(header);\n      break;\n    }\n  }\n}\n\n// Pass 2: partial (includes) matches for remaining unmapped fields\nfor (const [field, patterns] of Object.entries(KNOWN_HEADERS)) {\n  if (mapping[field]) continue;\n  for (const header of headers) {\n    if (usedHeaders.has(header)) continue;\n    const normalized = norm(header);\n    if (patterns.some(p => normalized.includes(p))) {\n      mapping[field] = header;\n      usedHeaders.add(header);\n      break;\n    }\n  }\n}\n\nconst hasDrugId = mapping.drugCode || mapping.articleName;\nconst hasQuantity = mapping.quantity;\n\nif (!hasDrugId || !hasQuantity) {\n  // Rule-based detection failed — return raw data for AI fallback\n  return [{\n    json: {\n      matched: false,\n      headers: headers,\n      mapping: mapping,\n      rawData: items.map(item => item.json),\n      orderLines: []\n    }\n  }];\n}\n\n// Normalize to canonical format\nconst orderLines = items.map((item, idx) => {\n  const row = item.json;\n  const qty = mapping.quantity ? Number(row[mapping.quantity]) || 0 : 0;\n  if (qty <= 0) return null; // skip empty rows\n\n  return {\n    sourceSheet: 'Sheet1',\n    sourceRow: idx + 2,\n    pharmacyId: mapping.pharmacyId ? String(row[mapping.pharmacyId] || '') : null,\n    pharmacyName: mapping.pharmacyName ? String(row[mapping.pharmacyName] || '') : null,\n    drugCode: mapping.drugCode ? String(row[mapping.drugCode] || '') : null,\n    articleName: mapping.articleName ? String(row[mapping.articleName] || '') : null,\n    quantity: qty,\n    unit: mapping.unit ? String(row[mapping.unit] || 'kom') : 'kom',\n    discount: mapping.discount ? (Number(row[mapping.discount]) || 0) : null,\n    notes: mapping.notes ? String(row[mapping.notes] || '') : '',\n    parseMethod: 'RULE_BASED',\n    parseConfidence: 1.0,\n    rawData: row\n  };\n}).filter(Boolean);\n\nreturn [{\n  json: {\n    matched: true,\n    mapping: mapping,\n    lineCount: orderLines.length,\n    orderLines: orderLines\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
@@ -77,60 +76,69 @@
     },
     {
       "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "// Split raw data into chunks and prepare LLM prompts\nconst input = $input.first().json;\nconst headers = input.headers || [];\nconst rawData = input.rawData || [];\n\nif (rawData.length === 0) {\n  return [{ json: { aiParsed: false, error: 'No raw data for AI parsing' } }];\n}\n\nfunction toCsv(rows) {\n  let csv = headers.join(',') + '\\n';\n  for (const row of rows) {\n    csv += headers.map(h => {\n      const val = String(row[h] || '');\n      return val.includes(',') ? '\"' + val + '\"' : val;\n    }).join(',') + '\\n';\n  }\n  return csv;\n}\n\nconst CHUNK_SIZE = 50;\nconst chunks = [];\nfor (let i = 0; i < rawData.length; i += CHUNK_SIZE) {\n  chunks.push(rawData.slice(i, i + CHUNK_SIZE));\n}\n\nconst instructions = 'Extract order lines from this Croatian pharmacy pre-order spreadsheet. Format varies — do NOT assume fixed structure.\\n\\nReturn ONLY a JSON array. No markdown, no explanation. Each object:\\n- drugCode: string (\"300...\"=regular, \"930...\"=gratis) or null\\n- articleName: string or null\\n- quantity: number (default 1 if empty)\\n- unit: string (default \"kom\")\\n- pharmacyId: string (\"7700...\" 10-digit) or null\\n- pharmacyName: string or null\\n- discount: percentage number (default 0). Convert decimals: 0.12→12.\\n\\nRules:\\n- Pharmacy info may be in metadata rows (not column data) — apply to all lines in that section.\\n- Headers may be mid-sheet. Identify by content (šifra, artikl, količina, rabat, naziv, KOM).\\n- Multiple sections (REDOVNE ŠIFRE, GRATIS ŠIFRE) or multiple pharmacies may repeat — extract all equally.\\n- Pivot formats: products as column headers with embedded codes, quantities in cells.\\n- Skip: empty rows, section labels, totals (TOTAL/UKUPNO), column header rows.\\n- GRT prefix = gratis item, still extract normally.';\n\nreturn chunks.map((chunk, idx) => {\n  const csv = toCsv(chunk);\n  const chunkNote = chunks.length > 1\n    ? '\\nNote: This is chunk ' + (idx + 1) + ' of ' + chunks.length + ' (rows ' + (idx * CHUNK_SIZE + 1) + '-' + Math.min((idx + 1) * CHUNK_SIZE, rawData.length) + ' of ' + rawData.length + '). Pharmacy metadata may have appeared in an earlier chunk — if no metadata is visible here, set pharmacyId and pharmacyName to null.'\n    : '';\n  return {\n    json: {\n      chunkIndex: idx,\n      totalChunks: chunks.length,\n      rowCount: rawData.length,\n      aiPrompt: instructions + chunkNote + '\\n\\nData:\\n' + csv\n    }\n  };\n});\n"
+        "jsCode": "// Split raw data into chunks and prepare LLM prompts\nconst input = $input.first().json;\nconst headers = input.headers || [];\nconst rawData = input.rawData || [];\n\nif (rawData.length === 0) {\n  return [{ json: { aiParsed: false, error: 'No raw data for AI parsing' } }];\n}\n\nfunction toCsv(rows) {\n  let csv = headers.join(',') + '\\n';\n  for (const row of rows) {\n    csv += headers.map(h => {\n      const val = String(row[h] || '');\n      return val.includes(',') ? '\"' + val + '\"' : val;\n    }).join(',') + '\\n';\n  }\n  return csv;\n}\n\nconst CHUNK_SIZE = 50;\nconst chunks = [];\nfor (let i = 0; i < rawData.length; i += CHUNK_SIZE) {\n  chunks.push(rawData.slice(i, i + CHUNK_SIZE));\n}\n\nconst instructions = 'Extract order lines from this Croatian pharmacy pre-order spreadsheet. Format varies — do NOT assume fixed structure.\\n\\nReturn ONLY a JSON array. No markdown, no explanation. Each object:\\n- drugCode: string (\"300...\"=regular, \"930...\"=gratis) or null\\n- articleName: string or null\\n- quantity: number from the data. If no quantity column exists or cell is empty, default to 1.\\n- unit: string (default \"kom\")\\n- pharmacyId: string (\"7700...\" 10-digit) or null\\n- pharmacyName: string or null\\n- discount: percentage number (default 0). Convert decimals: 0.12→12.\\n\\nRules:\\n- Every row with a drugCode or articleName is an order line — extract it even if quantity/discount columns are missing.\\n- Pharmacy info may be in metadata rows (not column data) — apply to all lines in that section.\\n- Headers may be mid-sheet. Identify by content (šifra, artikl, količina, rabat, naziv, KOM).\\n- Multiple sections (REDOVNE ŠIFRE, GRATIS ŠIFRE) or multiple pharmacies may repeat — extract all equally.\\n- Pivot formats: products as column headers with embedded codes, quantities in cells.\\n- Skip ONLY: empty rows, section labels (e.g. REDOVNE ŠIFRE), totals (TOTAL/UKUPNO), column header rows (e.g. Šifra artikla,Artikl).\\n- GRT prefix = gratis item, still extract normally.';\n\nreturn chunks.map((chunk, idx) => {\n  const csv = toCsv(chunk);\n  const chunkNote = chunks.length > 1\n    ? '\\nNote: This is chunk ' + (idx + 1) + ' of ' + chunks.length + ' (rows ' + (idx * CHUNK_SIZE + 1) + '-' + Math.min((idx + 1) * CHUNK_SIZE, rawData.length) + ' of ' + rawData.length + '). Pharmacy metadata may have appeared in an earlier chunk — if no metadata is visible here, set pharmacyId and pharmacyName to null.'\n    : '';\n  return {\n    json: {\n      chunkIndex: idx,\n      totalChunks: chunks.length,\n      rowCount: rawData.length,\n      systemMessage: instructions,\n      userMessage: chunkNote + '\\n\\nData:\\n' + csv\n    }\n  };\n});\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         960,
-        100
+        112
       ],
       "id": "f3000000-0000-4000-8000-000000000005",
       "name": "Prepare AI Prompt"
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://api.openai.com/v1/chat/completions",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.OPENAI_API_KEY }}"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"max_tokens\": 4096,\n  \"temperature\": 0,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.aiPrompt) }}\n    }\n  ]\n}",
-        "options": {
-          "timeout": 60000
-        }
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1200,
-        100
-      ],
-      "id": "f3000000-0000-4000-8000-000000000006",
-      "name": "LLM: Extract Order Lines"
-    },
-    {
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "// Parse LLM responses from all chunks and combine into canonical order lines\nconst allItems = $input.all();\nconst allOrderLines = [];\nconst errors = [];\n\nfor (const item of allItems) {\n  const data = item.json;\n  let aiText = '';\n\n  try {\n    aiText = (data.choices && data.choices[0].message.content) || (data.content && data.content[0].text) || '';\n    if (!aiText) throw new Error('Empty response');\n  } catch (e) {\n    errors.push('Chunk: Failed to parse LLM response: ' + e.message);\n    continue;\n  }\n\n  let jsonStr = aiText.trim();\n  if (jsonStr.startsWith('```')) {\n    jsonStr = jsonStr.replace(/^```(?:json)?\\n?/, '').replace(/\\n?```$/, '');\n  }\n\n  let parsed;\n  try {\n    parsed = JSON.parse(jsonStr);\n  } catch (e) {\n    errors.push('Chunk: Invalid JSON from LLM: ' + e.message);\n    continue;\n  }\n\n  if (!Array.isArray(parsed)) {\n    errors.push('Chunk: LLM did not return an array');\n    continue;\n  }\n\n  for (const line of parsed) {\n    allOrderLines.push({\n      sourceSheet: 'Sheet1',\n      sourceRow: null,\n      pharmacyId: line.pharmacyId || null,\n      pharmacyName: line.pharmacyName || null,\n      drugCode: line.drugCode ? String(line.drugCode) : null,\n      articleName: line.articleName ? String(line.articleName) : null,\n      quantity: Number(line.quantity) || 1,\n      unit: line.unit || 'kom',\n      discount: line.discount != null ? (Number(line.discount) || 0) : 0,\n      notes: '',\n      parseMethod: 'AI_EXTRACTED',\n      parseConfidence: 0.7,\n      rawData: line\n    });\n  }\n}\n\nif (allOrderLines.length === 0 && errors.length > 0) {\n  return [{ json: { matched: false, error: errors.join('; '), orderLines: [] } }];\n}\n\nreturn [{\n  json: {\n    matched: allOrderLines.length > 0,\n    lineCount: allOrderLines.length,\n    chunkCount: allItems.length,\n    errors: errors.length > 0 ? errors : undefined,\n    orderLines: allOrderLines\n  }\n}];\n"
+        "jsCode": "// Parse LLM responses from all chunks and combine into canonical order lines\nconst allItems = $input.all();\nconst allOrderLines = [];\nconst errors = [];\n\nfor (const item of allItems) {\n  const data = item.json;\n  let aiText = '';\n\n  try {\n    aiText = data.text || (data.output && data.output[0] && data.output[0].content && data.output[0].content[0] && data.output[0].content[0].text) || (data.choices && data.choices[0].message.content) || '';\n    if (!aiText) throw new Error('Empty response');\n  } catch (e) {\n    errors.push('Chunk: Failed to parse LLM response: ' + e.message);\n    continue;\n  }\n\n  let jsonStr = aiText.trim();\n  if (jsonStr.startsWith('```')) {\n    jsonStr = jsonStr.replace(/^```(?:json)?\\n?/, '').replace(/\\n?```$/, '');\n  }\n\n  let parsed;\n  try {\n    parsed = JSON.parse(jsonStr);\n  } catch (e) {\n    errors.push('Chunk: Invalid JSON from LLM: ' + e.message);\n    continue;\n  }\n\n  if (!Array.isArray(parsed)) {\n    errors.push('Chunk: LLM did not return an array');\n    continue;\n  }\n\n  for (const line of parsed) {\n    allOrderLines.push({\n      sourceSheet: 'Sheet1',\n      sourceRow: null,\n      pharmacyId: line.pharmacyId || null,\n      pharmacyName: line.pharmacyName || null,\n      drugCode: line.drugCode ? String(line.drugCode) : null,\n      articleName: line.articleName ? String(line.articleName) : null,\n      quantity: Number(line.quantity) || 1,\n      unit: line.unit || 'kom',\n      discount: line.discount != null ? (Number(line.discount) || 0) : 0,\n      notes: '',\n      parseMethod: 'AI_EXTRACTED',\n      parseConfidence: 0.7,\n      rawData: line\n    });\n  }\n}\n\nif (allOrderLines.length === 0 && errors.length > 0) {\n  return [{ json: { matched: false, error: errors.join('; '), orderLines: [] } }];\n}\n\nreturn [{\n  json: {\n    matched: allOrderLines.length > 0,\n    lineCount: allOrderLines.length,\n    chunkCount: allItems.length,\n    errors: errors.length > 0 ? errors : undefined,\n    orderLines: allOrderLines\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1440,
-        100
+        1536,
+        112
       ],
       "id": "f3000000-0000-4000-8000-000000000007",
       "name": "Parse AI Response"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "={{ $json.systemMessage }}"
+            },
+            {
+              "content": "={{ $json.userMessage }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 4096,
+          "temperature": 0.2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        1168,
+        112
+      ],
+      "id": "2cc55bd5-0292-4f6b-8a71-c44469046829",
+      "name": "LLM: Extract Order Lines",
+      "credentials": {
+        "openAiApi": {
+          "id": "eD10IPhcxdI4yu0p",
+          "name": "OpenAi account"
+        }
+      }
     }
   ],
   "connections": {
