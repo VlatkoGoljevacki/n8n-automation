@@ -92,24 +92,22 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.anthropic.com/v1/messages",
+        "url": "https://api.openai.com/v1/chat/completions",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "x-api-key",
-              "value": "={{ $vars.MEDIKA_PREORDERS_LLM_API_KEY }}"
-            },
-            {
-              "name": "anthropic-version",
-              "value": "2023-06-01"
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENAI_API_KEY }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-20250514\",\n  \"max_tokens\": 4096,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.aiPrompt) }}\n    }\n  ]\n}",
-        "options": {}
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"max_tokens\": 4096,\n  \"temperature\": 0,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.aiPrompt) }}\n    }\n  ]\n}",
+        "options": {
+          "timeout": 60000
+        }
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -123,7 +121,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Parse LLM response into canonical order lines\nconst input = $input.first().json;\nlet aiText = '';\n\ntry {\n  aiText = input.content[0].text;\n} catch (e) {\n  return [{ json: { matched: false, error: 'Failed to parse LLM response', orderLines: [] } }];\n}\n\n// Extract JSON array from response (handle markdown code blocks)\nlet jsonStr = aiText.trim();\nif (jsonStr.startsWith('```')) {\n  jsonStr = jsonStr.replace(/^```(?:json)?\\n?/, '').replace(/\\n?```$/, '');\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(jsonStr);\n} catch (e) {\n  return [{ json: { matched: false, error: `Invalid JSON from LLM: ${e.message}`, rawResponse: aiText, orderLines: [] } }];\n}\n\nif (!Array.isArray(parsed)) {\n  return [{ json: { matched: false, error: 'LLM did not return an array', rawResponse: aiText, orderLines: [] } }];\n}\n\nconst orderLines = parsed.map((item, idx) => ({\n  sourceSheet: 'Sheet1',\n  sourceRow: idx + 1,\n  pharmacyId: item.pharmacyId || null,\n  pharmacyName: item.pharmacyName || null,\n  drugCode: item.drugCode ? String(item.drugCode) : null,\n  articleName: item.articleName ? String(item.articleName) : null,\n  quantity: Number(item.quantity) || 0,\n  unit: item.unit || 'kom',\n  discount: item.discount != null ? (Number(item.discount) || 0) : null,\n  notes: '',\n  parseMethod: 'AI_EXTRACTED',\n  parseConfidence: 0.7,\n  rawData: item\n})).filter(line => line.quantity > 0);\n\nreturn [{\n  json: {\n    matched: true,\n    lineCount: orderLines.length,\n    orderLines: orderLines\n  }\n}];\n"
+        "jsCode": "// Parse LLM response into canonical order lines\nconst input = $input.first().json;\nlet aiText = '';\n\ntry {\n  // Support both OpenAI and Anthropic response formats\n  aiText = (input.choices && input.choices[0].message.content) || (input.content && input.content[0].text) || '';\n  if (!aiText) throw new Error('Empty response');\n} catch (e) {\n  return [{ json: { matched: false, error: 'Failed to parse LLM response: ' + e.message, orderLines: [] } }];\n}\n\n// Extract JSON array from response (handle markdown code blocks)\nlet jsonStr = aiText.trim();\nif (jsonStr.startsWith('```')) {\n  jsonStr = jsonStr.replace(/^```(?:json)?\\n?/, '').replace(/\\n?```$/, '');\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(jsonStr);\n} catch (e) {\n  return [{ json: { matched: false, error: `Invalid JSON from LLM: ${e.message}`, rawResponse: aiText, orderLines: [] } }];\n}\n\nif (!Array.isArray(parsed)) {\n  return [{ json: { matched: false, error: 'LLM did not return an array', rawResponse: aiText, orderLines: [] } }];\n}\n\nconst orderLines = parsed.map((item, idx) => ({\n  sourceSheet: 'Sheet1',\n  sourceRow: idx + 1,\n  pharmacyId: item.pharmacyId || null,\n  pharmacyName: item.pharmacyName || null,\n  drugCode: item.drugCode ? String(item.drugCode) : null,\n  articleName: item.articleName ? String(item.articleName) : null,\n  quantity: Number(item.quantity) || 0,\n  unit: item.unit || 'kom',\n  discount: item.discount != null ? (Number(item.discount) || 0) : null,\n  notes: '',\n  parseMethod: 'AI_EXTRACTED',\n  parseConfidence: 0.7,\n  rawData: item\n})).filter(line => line.quantity > 0);\n\nreturn [{\n  json: {\n    matched: true,\n    lineCount: orderLines.length,\n    orderLines: orderLines\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,

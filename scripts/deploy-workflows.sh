@@ -156,8 +156,35 @@ for file in "${files[@]}"; do
   existing_id=$(echo "$existing_map" | awk -F'\t' -v name="$workflow_name" '$2 == name { print $1; exit }')
 
   if [ -n "$existing_id" ]; then
-    # Update existing workflow (PUT) — pipe jq directly to curl to preserve JSON integrity
-    http_code=$(jq 'del(.active, .id, .versionId, .tags, .meta, .updatedAt, .createdAt)' "$file" | \
+    # Fetch current server version, merge positions/credentials into local, then deploy
+    http_code=$(curl -s "${N8N_API_URL}/api/v1/workflows/${existing_id}" \
+      -H "X-N8N-API-KEY: ${N8N_API_KEY}" | \
+      python3 -c "
+import sys, json
+
+server = json.load(sys.stdin)
+with open(sys.argv[1]) as f:
+    local = json.load(f)
+
+# Build lookup from server nodes by name
+server_nodes = {n['name']: n for n in server.get('nodes', [])}
+
+# Merge server-side properties into local nodes
+for node in local.get('nodes', []):
+    sn = server_nodes.get(node['name'])
+    if sn:
+        if 'position' in sn:
+            node['position'] = sn['position']
+        if 'credentials' in sn:
+            node['credentials'] = sn['credentials']
+        if 'webhookId' in sn:
+            node['webhookId'] = sn['webhookId']
+
+for key in ('active','id','versionId','tags','meta','updatedAt','createdAt'):
+    local.pop(key, None)
+
+json.dump(local, sys.stdout, ensure_ascii=False)
+" "$file" | \
       curl -s -o /dev/null -w "%{http_code}" \
       -X PUT "${N8N_API_URL}/api/v1/workflows/${existing_id}" \
       -H "X-N8N-API-KEY: ${N8N_API_KEY}" \

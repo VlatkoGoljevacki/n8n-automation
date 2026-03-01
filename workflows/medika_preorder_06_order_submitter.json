@@ -8,26 +8,31 @@
       },
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
-      "position": [
-        0,
-        0
-      ],
+      "position": [0, 0],
       "id": "f6000000-0000-4000-8000-000000000001",
       "name": "Sub-Workflow Input"
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Build Medika SaveTransferOrder request payload\nconst input = $input.first().json;\nconst config = input.config || {};\nconst lines = input.validatedLines || [];\n\nconst submittableLines = lines.filter(l => l.articleId && l.valid !== false);\nconst skippedLines = lines.filter(l => !l.articleId || l.valid === false);\n\nconst orderPayload = {\n  BusinessCenter: input.businessCenter || config.businessCenterDefault || '10',\n  Customer: input.customer || '',\n  DeliveryPlace: input.deliveryPlace || '',\n  CustomerOrderNumber: 'MP-' + (input.emailId || '').substring(0, 8) + '-' + Date.now(),\n  CustomerOrderDate: (input.receivedAt || new Date().toISOString()).split('T')[0],\n  Text: input.emailSubject || 'Prednarudžba',\n  Items: submittableLines.map(line => ({\n    ArticleID: String(line.articleId),\n    ArticleDescCustomer: line.articleName || '',\n    Quantity: parseFloat(line.quantity) || 0,\n    DiscountPerc: parseFloat(line.discountPerc) || 0.0,\n    Message: line.notes || ''\n  }))\n};\n\nreturn [{\n  json: {\n    config: config,\n    orderPayload: orderPayload,\n    submittedLineCount: submittableLines.length,\n    skippedLineCount: skippedLines.length,\n    skippedLines: skippedLines\n  }\n}];\n"
+        "jsCode": "// Build Medika SaveTransferOrder request payload\nconst input = $input.first().json;\nconst config = input.config || {};\nconst lines = input.validatedLines || [];\n\nconst submittableLines = lines.filter(l => l.articleId && l.valid !== false);\nconst skippedLines = lines.filter(l => !l.articleId || l.valid === false);\n\nconst orderPayload = {\n  BusinessCenter: input.businessCenter || config.businessCenterDefault || '10',\n  Customer: input.customer || '',\n  DeliveryPlace: input.deliveryPlace || '',\n  CustomerOrderNumber: 'MP-' + (input.emailId || '').substring(0, 8) + '-' + Date.now(),\n  CustomerOrderDate: (input.receivedAt || new Date().toISOString()).split('T')[0],\n  Text: input.emailSubject || 'Prednarudžba',\n  Items: submittableLines.map(line => ({\n    ArticleID: String(line.articleId),\n    ArticleDescCustomer: line.articleName || '',\n    Quantity: parseFloat(line.quantity) || 0,\n    DiscountPerc: parseFloat(line.discountPerc) || 0.0,\n    Message: line.notes || ''\n  }))\n};\n\nreturn [{\n  json: {\n    config: config,\n    accessToken: input.accessToken || null,\n    orderPayload: orderPayload,\n    submittedLineCount: submittableLines.length,\n    skippedLineCount: skippedLines.length,\n    skippedLines: skippedLines\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        240,
-        0
-      ],
+      "position": [240, 0],
       "id": "f6000000-0000-4000-8000-000000000002",
       "name": "Build API Payload"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// DRY RUN: Preview the exact HTTP request that would be sent to the API\nconst input = $input.first().json;\nconst config = input.config || {};\nconst apiUrl = (config.erpApiUrl || '') + '/api/SaveTransferOrder';\n\nreturn [{\n  json: {\n    _mode: 'DRY_RUN',\n    _note: 'This is a preview of the API request. No actual call was made.',\n    request: {\n      method: 'POST',\n      url: apiUrl,\n      headers: {\n        'Content-Type': 'application/json',\n        'Authorization': 'Bearer ' + (input.accessToken ? input.accessToken.substring(0, 20) + '...' : '(no token)')\n      },\n      body: input.orderPayload\n    },\n    summary: {\n      submittedLineCount: input.submittedLineCount,\n      skippedLineCount: input.skippedLineCount,\n      skippedLines: input.skippedLines,\n      customerOrderNumber: input.orderPayload.CustomerOrderNumber,\n      customer: input.orderPayload.Customer,\n      deliveryPlace: input.orderPayload.DeliveryPlace,\n      itemCount: (input.orderPayload.Items || []).length\n    },\n    submitted: true,\n    orderId: 'DRY-RUN-' + Date.now(),\n    submittedAt: new Date().toISOString()\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 0],
+      "id": "f6000000-0000-4000-8000-000000000020",
+      "name": "Preview API Request (DRY RUN)"
     },
     {
       "parameters": {
@@ -36,10 +41,7 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        480,
-        0
-      ],
+      "position": [480, 0],
       "id": "f6000000-0000-4000-8000-000000000015",
       "name": "Check Token Cache"
     },
@@ -68,10 +70,7 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [
-        720,
-        0
-      ],
+      "position": [720, 0],
       "id": "f6000000-0000-4000-8000-000000000016",
       "name": "Token Valid?"
     },
@@ -97,10 +96,7 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        960,
-        200
-      ],
+      "position": [960, 200],
       "id": "f6000000-0000-4000-8000-000000000011",
       "name": "Fetch ERP Token"
     },
@@ -111,10 +107,7 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1200,
-        200
-      ],
+      "position": [1200, 200],
       "id": "f6000000-0000-4000-8000-000000000017",
       "name": "Store Token"
     },
@@ -144,10 +137,7 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1440,
-        0
-      ],
+      "position": [1440, -300],
       "id": "f6000000-0000-4000-8000-000000000003",
       "name": "Submit Order to API"
     },
@@ -158,10 +148,7 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1680,
-        0
-      ],
+      "position": [1680, -300],
       "id": "f6000000-0000-4000-8000-000000000004",
       "name": "Process API Response"
     }
@@ -204,7 +191,7 @@
       "main": [
         [
           {
-            "node": "Submit Order to API",
+            "node": "Preview API Request (DRY RUN)",
             "type": "main",
             "index": 0
           }
@@ -233,18 +220,7 @@
       "main": [
         [
           {
-            "node": "Submit Order to API",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Submit Order to API": {
-      "main": [
-        [
-          {
-            "node": "Process API Response",
+            "node": "Preview API Request (DRY RUN)",
             "type": "main",
             "index": 0
           }
