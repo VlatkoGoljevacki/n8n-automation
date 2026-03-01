@@ -7,6 +7,10 @@
 #   ./scripts/deploy-workflows.sh workflows/foo.json  # deploy one
 #   ./scripts/deploy-workflows.sh pull              # pull all medika_preorder workflows
 #   ./scripts/deploy-workflows.sh pull workflows/foo.json  # pull one
+#   ./scripts/deploy-workflows.sh publish            # activate all medika_preorder workflows
+#   ./scripts/deploy-workflows.sh publish workflows/foo.json  # activate one
+#   ./scripts/deploy-workflows.sh unpublish          # deactivate all
+#   ./scripts/deploy-workflows.sh unpublish workflows/foo.json  # deactivate one
 #
 # Requires:
 #   - jq, python3
@@ -111,6 +115,94 @@ print(json.dumps(out, indent=2, ensure_ascii=False))
 
   echo ""
   echo "Done: $pulled pulled."
+  exit 0
+fi
+
+# ── Publish/Unpublish mode ───────────────────────────────────────────
+if [ "${1:-}" = "publish" ] || [ "${1:-}" = "unpublish" ]; then
+  action="$1"
+  shift
+  if [ $# -gt 0 ]; then
+    files=("$@")
+  else
+    files=(workflows/medika_preorder_*.json)
+  fi
+
+  if [ "$action" = "publish" ]; then
+    active_val="true"
+    verb="Activating"
+    past="activated"
+  else
+    active_val="false"
+    verb="Deactivating"
+    past="deactivated"
+  fi
+
+  echo "${verb} ${#files[@]} workflow(s)..."
+  echo ""
+
+  # Build name→id map
+  existing_map=$(curl -s "${N8N_API_URL}/api/v1/workflows?limit=100" \
+    -H "X-N8N-API-KEY: ${N8N_API_KEY}" | \
+    python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for w in data.get('data', []):
+    print(w['id'] + '\t' + w['name'] + '\t' + str(w.get('active', False)))
+" 2>/dev/null || true)
+
+  changed=0
+  skipped=0
+  failed=0
+  for file in "${files[@]}"; do
+    filename=$(basename "$file")
+    workflow_name=$(jq -r '.name' "$file")
+    echo -n "  $filename ($workflow_name) ... "
+
+    existing_id=$(echo "$existing_map" | awk -F'\t' -v name="$workflow_name" '$2 == name { print $1; exit }')
+
+    if [ -z "$existing_id" ]; then
+      echo "NOT FOUND in n8n (skipped)"
+      skipped=$((skipped + 1))
+      continue
+    fi
+
+    # Check current state
+    current_active=$(echo "$existing_map" | awk -F'\t' -v name="$workflow_name" '$2 == name { print $3; exit }')
+    if [ "$action" = "publish" ] && [ "$current_active" = "True" ]; then
+      echo "already active"
+      skipped=$((skipped + 1))
+      continue
+    elif [ "$action" = "unpublish" ] && [ "$current_active" = "False" ]; then
+      echo "already inactive"
+      skipped=$((skipped + 1))
+      continue
+    fi
+
+    if [ "$action" = "publish" ]; then
+      endpoint="activate"
+    else
+      endpoint="deactivate"
+    fi
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+      -X POST "${N8N_API_URL}/api/v1/workflows/${existing_id}/${endpoint}" \
+      -H "X-N8N-API-KEY: ${N8N_API_KEY}")
+
+    if [ "$http_code" = "200" ]; then
+      echo "${past} (id: $existing_id)"
+      changed=$((changed + 1))
+    else
+      echo "FAILED (HTTP $http_code)"
+      failed=$((failed + 1))
+    fi
+  done
+
+  echo ""
+  echo "Done: $changed ${past}, $skipped skipped, $failed failed (${#files[@]} total)"
+
+  if [ "$failed" -gt 0 ]; then
+    exit 1
+  fi
   exit 0
 fi
 

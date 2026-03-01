@@ -33,6 +33,8 @@ services:
       - EXECUTIONS_DATA_MAX_AGE=8760
       - EXECUTIONS_DATA_PRUNE=true
       - EXECUTIONS_DATA_PRUNE_MAX_COUNT=10000
+      # Prevent trigger de-registration on container restart
+      - N8N_SKIP_WEBHOOK_DEREGISTRATION_SHUTDOWN=true
       ### workflow vars
       - PLACES_API=${PLACES_API}
     deploy:
