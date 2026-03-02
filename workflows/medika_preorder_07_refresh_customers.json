@@ -1,0 +1,269 @@
+{
+  "name": "[medika-preorders] WF-07: Refresh Customer Registry",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f7000000-0000-4000-8000-000000000001",
+      "name": "Sub-Workflow Input"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.MEDIKA_ERP_URL + '/api/Customers2' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.erpToken }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "f7000000-0000-4000-8000-000000000002",
+      "name": "Fetch Customers API"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Flatten customers into one row per delivery place (denormalized)\nconst items = $input.all();\nconst rows = [];\n\nfor (const item of items) {\n  const c = item.json;\n  if (!c.DeliveryPlaces || c.DeliveryPlaces.length === 0) continue;\n\n  for (const dp of c.DeliveryPlaces) {\n    rows.push({\n      json: {\n        deliveryPlaceId: String(dp.ID),\n        customerId: String(c.ID),\n        customerName: c.Name || (c.Name1 + ' ' + (c.Name2 || '')).trim(),\n        name: dp.Name || (dp.Name1 + ' ' + (dp.Name2 || '')).trim(),\n        oib: c.OIB || '',\n        city: dp.City || '',\n        postCode: dp.PostCode || '',\n        street: dp.Street || ''\n      }\n    });\n  }\n}\n\nif (rows.length === 0) {\n  throw new Error('No delivery places found in ERP response');\n}\n\nreturn rows;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "id": "f7000000-0000-4000-8000-000000000003",
+      "name": "Flatten Delivery Places"
+    },
+    {
+      "parameters": {
+        "batchSize": 500,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        768,
+        0
+      ],
+      "id": "f7000000-0000-4000-8000-000000000005",
+      "name": "Batch 500"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "IorEZZc62YoIw0PA",
+          "mode": "list",
+          "cachedResultName": "Customers",
+          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/IorEZZc62YoIw0PA"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "customerId",
+              "keyValue": "={{ $json.customerId }}"
+            },
+            {
+              "keyName": "deliveryPlaceId",
+              "keyValue": "={{ $json.deliveryPlaceId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "deliveryPlaceId": "={{ $json.deliveryPlaceId }}",
+            "customerId": "={{ $json.customerId }}",
+            "customerName": "={{ $json.customerName }}",
+            "name": "={{ $json.name }}",
+            "oib": "={{ $json.oib }}",
+            "city": "={{ $json.city }}",
+            "postCode": "={{ $json.postCode }}",
+            "street": "={{ $json.street }}"
+          },
+          "matchingColumns": [
+            "deliveryPlaceId"
+          ],
+          "schema": [
+            {
+              "id": "deliveryPlaceId",
+              "displayName": "deliveryPlaceId",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "customerId",
+              "displayName": "customerId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "customerName",
+              "displayName": "customerName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "oib",
+              "displayName": "oib",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "city",
+              "displayName": "city",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "postCode",
+              "displayName": "postCode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "street",
+              "displayName": "street",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1072,
+        16
+      ],
+      "id": "f7000000-0000-4000-8000-000000000004",
+      "name": "DT: Upsert Customers"
+    }
+  ],
+  "connections": {
+    "Sub-Workflow Input": {
+      "main": [
+        [
+          {
+            "node": "Fetch Customers API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Customers API": {
+      "main": [
+        [
+          {
+            "node": "Flatten Delivery Places",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flatten Delivery Places": {
+      "main": [
+        [
+          {
+            "node": "Batch 500",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch 500": {
+      "main": [
+        [],
+        [
+          {
+            "node": "DT: Upsert Customers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DT: Upsert Customers": {
+      "main": [
+        [
+          {
+            "node": "Batch 500",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": []
+}
