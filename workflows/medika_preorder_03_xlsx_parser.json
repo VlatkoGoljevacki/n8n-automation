@@ -76,25 +76,12 @@
     },
     {
       "parameters": {
-        "jsCode": "// Split raw data into chunks and prepare LLM prompts\nconst input = $input.first().json;\nconst headers = input.headers || [];\nconst rawData = input.rawData || [];\n\nif (rawData.length === 0) {\n  return [{ json: { aiParsed: false, error: 'No raw data for AI parsing' } }];\n}\n\nfunction toCsv(rows) {\n  let csv = headers.join(',') + '\\n';\n  for (const row of rows) {\n    csv += headers.map(h => {\n      const val = String(row[h] || '');\n      return val.includes(',') ? '\"' + val + '\"' : val;\n    }).join(',') + '\\n';\n  }\n  return csv;\n}\n\nconst CHUNK_SIZE = 50;\nconst chunks = [];\nfor (let i = 0; i < rawData.length; i += CHUNK_SIZE) {\n  chunks.push(rawData.slice(i, i + CHUNK_SIZE));\n}\n\nconst instructions = 'Extract order lines from this Croatian pharmacy pre-order spreadsheet. Format varies — do NOT assume fixed structure.\\n\\nReturn ONLY a JSON array. No markdown, no explanation. Each object:\\n- drugCode: string (\"300...\"=regular, \"930...\"=gratis) or null\\n- articleName: string or null\\n- quantity: number — IMPORTANT: look for a column containing numeric quantities (količina, kol, qty, kom, amount, naručeno). Copy the exact number from that column. Only default to 1 if NO quantity column exists anywhere in the data.\\n- unit: string (default \"kom\")\\n- pharmacyId: string (\"7700...\" 10-digit) or null\\n- pharmacyName: string or null\\n- discount: percentage number (default 0). Convert decimals: 0.12→12.\\n\\nRules:\\n- Every row with a drugCode or articleName is an order line — extract it even if quantity/discount columns are missing.\\n- Pharmacy info may be in metadata rows (not column data) — apply to all lines in that section.\\n- Headers may be mid-sheet. Identify by content (šifra, artikl, količina, rabat, naziv, KOM).\\n- Multiple sections (REDOVNE ŠIFRE, GRATIS ŠIFRE) or multiple pharmacies may repeat — extract all equally.\\n- Pivot formats: products as column headers with embedded codes, quantities in cells.\\n- Skip ONLY: empty rows, section labels (e.g. REDOVNE ŠIFRE), totals (TOTAL/UKUPNO), column header rows (e.g. Šifra artikla,Artikl).\\n- GRT prefix = gratis item, still extract normally.';\n\nreturn chunks.map((chunk, idx) => {\n  const csv = toCsv(chunk);\n  const chunkNote = chunks.length > 1\n    ? '\\nNote: This is chunk ' + (idx + 1) + ' of ' + chunks.length + ' (rows ' + (idx * CHUNK_SIZE + 1) + '-' + Math.min((idx + 1) * CHUNK_SIZE, rawData.length) + ' of ' + rawData.length + '). Pharmacy metadata may have appeared in an earlier chunk — if no metadata is visible here, set pharmacyId and pharmacyName to null.'\n    : '';\n  return {\n    json: {\n      chunkIndex: idx,\n      totalChunks: chunks.length,\n      rowCount: rawData.length,\n      systemMessage: instructions,\n      userMessage: chunkNote + '\\n\\nData:\\n' + csv\n    }\n  };\n});\n"
+        "jsCode": "// Parse the extraction LLM response (single response, not chunked)\nconst data = $input.first().json;\nlet aiText = '';\n\ntry {\n  aiText = (typeof data.text === 'string' && data.text)\n    || (data.output && data.output.find(o => o.type === 'message')?.content?.[0]?.text)\n    || (data.output && data.output[0]?.content?.[0]?.text)\n    || '';\n  if (!aiText) throw new Error('Empty response from LLM');\n} catch (e) {\n  return [{ json: { matched: false, error: 'Failed to parse LLM response: ' + e.message, orderLines: [] } }];\n}\n\nlet jsonStr = aiText.trim();\nif (jsonStr.startsWith('```')) {\n  jsonStr = jsonStr.replace(/^```(?:json)?\\n?/, '').replace(/\\n?```$/, '');\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(jsonStr);\n} catch (e) {\n  const match = jsonStr.match(/\\[[\\s\\S]*\\]/);\n  if (match) {\n    try { parsed = JSON.parse(match[0]); }\n    catch (e2) { return [{ json: { matched: false, error: 'Invalid JSON from LLM: ' + e.message, orderLines: [] } }]; }\n  } else {\n    return [{ json: { matched: false, error: 'No JSON array in LLM response', orderLines: [] } }];\n  }\n}\n\nif (!Array.isArray(parsed)) {\n  return [{ json: { matched: false, error: 'LLM did not return an array', orderLines: [] } }];\n}\n\nconst orderLines = parsed.map(line => ({\n  sourceSheet: line.sourceSheet || 'Sheet1',\n  sourceRow: null,\n  pharmacyId: line.pharmacyId || null,\n  pharmacyName: line.pharmacyName || null,\n  drugCode: line.drugCode ? String(line.drugCode) : null,\n  articleName: line.articleName ? String(line.articleName) : null,\n  quantity: Number(line.quantity) || 1,\n  unit: line.unit || 'kom',\n  discount: line.discount != null ? (Number(line.discount) || 0) : 0,\n  notes: line.notes || '',\n  parseMethod: 'AI_EXTRACTED',\n  parseConfidence: 0.7,\n  rawData: line\n}));\n\nif (orderLines.length === 0) {\n  return [{ json: { matched: false, error: 'No order lines extracted', orderLines: [] } }];\n}\n\n// Build compact version for verification prompt (no rawData, saves tokens)\nconst compactLines = orderLines.map(l => ({\n  drugCode: l.drugCode,\n  articleName: l.articleName,\n  quantity: l.quantity,\n  unit: l.unit,\n  pharmacyId: l.pharmacyId,\n  pharmacyName: l.pharmacyName,\n  discount: l.discount,\n  sourceSheet: l.sourceSheet\n}));\n\n// Build verification prompt with extracted data embedded\nconst verifyPrompt = 'You are a data verification assistant for Croatian pharmacy pre-orders.\\n\\n'\n  + 'Use Python (pandas/openpyxl) to re-read the uploaded XLSX file independently. '\n  + 'Compare the source data against the extracted order lines below.\\n\\n'\n  + 'Check for:\\n'\n  + '- Wrong quantities (MOST CRITICAL \\u2014 must match source exactly)\\n'\n  + '- Missing order lines (rows with product codes not extracted)\\n'\n  + '- Wrong drug codes or article names\\n'\n  + '- Wrong pharmacy info\\n'\n  + '- Hallucinated lines not in the source file\\n'\n  + '- Lines from ALL sheets, not just the first\\n'\n  + '- DUPLICATES: Multiple sheets may show the same data in different layouts (e.g. pivot table vs regular table). If the same pharmacy+drugCode+quantity appears multiple times from different sheets, keep only one copy.\\n\\n'\n  + 'Return ONLY a corrected raw JSON array with the same schema. '\n  + 'No markdown fences, no explanation. If everything is correct, return the same array unchanged.\\n\\n'\n  + 'Extracted order lines to verify:\\n'\n  + JSON.stringify(compactLines);\n\nreturn [{\n  json: {\n    matched: true,\n    lineCount: orderLines.length,\n    orderLines: orderLines,\n    verifyPrompt: verifyPrompt\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        960,
-        112
-      ],
-      "id": "f3000000-0000-4000-8000-000000000005",
-      "name": "Prepare AI Prompt"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Parse LLM responses from all chunks and combine into canonical order lines\nconst allItems = $input.all();\nconst allOrderLines = [];\nconst errors = [];\n\nfor (const item of allItems) {\n  const data = item.json;\n  let aiText = '';\n\n  try {\n    aiText = data.text || (data.output && data.output[0] && data.output[0].content && data.output[0].content[0] && data.output[0].content[0].text) || (data.choices && data.choices[0].message.content) || '';\n    if (!aiText) throw new Error('Empty response');\n  } catch (e) {\n    errors.push('Chunk: Failed to parse LLM response: ' + e.message);\n    continue;\n  }\n\n  let jsonStr = aiText.trim();\n  if (jsonStr.startsWith('```')) {\n    jsonStr = jsonStr.replace(/^```(?:json)?\\n?/, '').replace(/\\n?```$/, '');\n  }\n\n  let parsed;\n  try {\n    parsed = JSON.parse(jsonStr);\n  } catch (e) {\n    errors.push('Chunk: Invalid JSON from LLM: ' + e.message);\n    continue;\n  }\n\n  if (!Array.isArray(parsed)) {\n    errors.push('Chunk: LLM did not return an array');\n    continue;\n  }\n\n  for (const line of parsed) {\n    allOrderLines.push({\n      sourceSheet: 'Sheet1',\n      sourceRow: null,\n      pharmacyId: line.pharmacyId || null,\n      pharmacyName: line.pharmacyName || null,\n      drugCode: line.drugCode ? String(line.drugCode) : null,\n      articleName: line.articleName ? String(line.articleName) : null,\n      quantity: Number(line.quantity) || 1,\n      unit: line.unit || 'kom',\n      discount: line.discount != null ? (Number(line.discount) || 0) : 0,\n      notes: '',\n      parseMethod: 'AI_EXTRACTED',\n      parseConfidence: 0.7,\n      rawData: line\n    });\n  }\n}\n\nif (allOrderLines.length === 0 && errors.length > 0) {\n  return [{ json: { matched: false, error: errors.join('; '), orderLines: [] } }];\n}\n\nreturn [{\n  json: {\n    matched: allOrderLines.length > 0,\n    lineCount: allOrderLines.length,\n    chunkCount: allItems.length,\n    errors: errors.length > 0 ? errors : undefined,\n    orderLines: allOrderLines\n  }\n}];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1536,
+        1760,
         112
       ],
       "id": "f3000000-0000-4000-8000-000000000007",
@@ -104,22 +91,25 @@
       "parameters": {
         "modelId": {
           "__rl": true,
-          "value": "gpt-5-mini",
+          "value": "gpt-5.2",
           "mode": "list",
-          "cachedResultName": "GPT-5-MINI"
+          "cachedResultName": "GPT-5.2"
         },
         "responses": {
           "values": [
             {
-              "role": "system",
-              "content": "={{ $json.systemMessage }}"
+              "type": "file",
+              "fileType": "fileId",
+              "fileId": "={{ $('Upload XLSX to OpenAI').first().json.id }}"
             },
             {
-              "content": "={{ $json.userMessage }}"
+              "content": "You are an expert data extraction assistant for Croatian pharmacy pre-orders.\n\nUse Python (pandas and openpyxl) to read the uploaded XLSX file and extract all order lines.\n\nInstructions:\n1. Read ALL sheets in the workbook\n2. Detect header rows by content (look for: šifra, artikl, naziv, količina, qty, kom, rabat, kupac, ljekarna, jm, kol, naručeno)\n3. Handle merged cells — unmerge and forward-fill values\n4. Extract every row that contains a product code (drugCode) or article name\n\nReturn ONLY a raw JSON array. No markdown fences, no explanation, no extra text.\n\nEach element must have this schema:\n{\"drugCode\": \"string or null\", \"articleName\": \"string or null\", \"quantity\": number, \"unit\": \"string\", \"pharmacyId\": \"string or null\", \"pharmacyName\": \"string or null\", \"discount\": number, \"notes\": \"string\", \"sourceSheet\": \"string\"}\n\nField details:\n- drugCode: product code string (e.g. \"3001234\" regular, \"9301234\" gratis) or null\n- articleName: product name string or null\n- quantity: exact number from quantity column. Default to 1 ONLY if no quantity column exists anywhere\n- unit: default \"kom\"\n- pharmacyId: 10-digit string starting with \"7700\" or null\n- pharmacyName: pharmacy name string or null\n- discount: percentage number (convert decimals: 0.12 → 12). Default 0\n- notes: default \"\"\n- sourceSheet: the sheet name this line came from\n\nRules:\n- Extract ALL order lines from ALL sheets\n- Pharmacy info may appear in metadata rows above the table — apply to all lines in that section\n- Multiple sections (REDOVNE ŠIFRE, GRATIS ŠIFRE) or pharmacies may appear — extract all\n- GRT prefix = gratis item, extract normally\n- Skip: empty rows, section labels, totals (TOTAL/UKUPNO), column header rows\n- Preserve exact quantities from source — never guess\n- DEDUPLICATION: Multiple sheets or tables may contain the SAME data in different layouts (e.g. a pivot table and a regular table). Compare across sheets — if the same pharmacy+drugCode+quantity appears in multiple sheets, it is a duplicate. Output each unique order line ONLY ONCE."
             }
           ]
         },
-        "builtInTools": {},
+        "builtInTools": {
+          "codeInterpreter": true
+        },
         "options": {
           "maxTokens": 4096
         }
@@ -127,7 +117,7 @@
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 2.1,
       "position": [
-        1168,
+        1440,
         112
       ],
       "id": "2cc55bd5-0292-4f6b-8a71-c44469046829",
@@ -141,40 +131,29 @@
     },
     {
       "parameters": {
-        "jsCode": "// Prepare verification prompt: send original CSV + extracted JSON to a second LLM\nconst parseResult = $input.first().json;\n\nif (!parseResult.matched || !parseResult.orderLines || parseResult.orderLines.length === 0) {\n  // Nothing to verify — pass through\n  return [{ json: parseResult }];\n}\n\n// Get original CSV data from the Prepare AI Prompt node's input\nconst detectResult = $('Detect Columns & Normalize').first().json;\nconst headers = detectResult.headers || [];\nconst rawData = detectResult.rawData || [];\n\nfunction toCsv(rows) {\n  let csv = headers.join(',') + '\\n';\n  for (const row of rows) {\n    csv += headers.map(h => {\n      const val = String(row[h] || '');\n      return val.includes(',') ? '\"' + val + '\"' : val;\n    }).join(',') + '\\n';\n  }\n  return csv;\n}\n\nconst originalCsv = toCsv(rawData);\nconst extractedJson = JSON.stringify(parseResult.orderLines.map(l => ({\n  drugCode: l.drugCode,\n  articleName: l.articleName,\n  quantity: l.quantity,\n  unit: l.unit,\n  pharmacyId: l.pharmacyId,\n  pharmacyName: l.pharmacyName,\n  discount: l.discount\n})), null, 0);\n\nconst systemMsg = 'You are a data verification assistant. Compare an extracted JSON array against the original spreadsheet CSV data. Check for:\\n- Wrong quantities (most critical — must match the source data exactly)\\n- Missing order lines (rows with product codes/names that were not extracted)\\n- Wrong drug codes or article names\\n- Wrong pharmacy info\\n- Hallucinated lines not present in the source\\n\\nReturn ONLY a corrected JSON array with the same schema. No markdown, no explanation. If everything is correct, return the same array unchanged.';\n\nconst userMsg = 'Original spreadsheet data (CSV):\\n' + originalCsv + '\\n\\nExtracted order lines (JSON):\\n' + extractedJson;\n\nreturn [{\n  json: {\n    needsVerification: true,\n    originalParseResult: parseResult,\n    systemMessage: systemMsg,\n    userMessage: userMsg\n  }\n}];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1776,
-        112
-      ],
-      "id": "f3000000-0000-4000-8000-000000000008",
-      "name": "Prepare Verification Prompt"
-    },
-    {
-      "parameters": {
         "modelId": {
           "__rl": true,
-          "value": "gpt-4.1-mini",
+          "value": "gpt-5-mini",
           "mode": "list",
-          "cachedResultName": "GPT-4.1-MINI"
+          "cachedResultName": "GPT-5-MINI"
         },
         "responses": {
           "values": [
             {
-              "role": "system",
-              "content": "={{ $json.systemMessage }}"
+              "type": "file",
+              "fileType": "fileId",
+              "fileId": "={{ $('Upload XLSX to OpenAI').first().json.id }}"
             },
             {
-              "content": "={{ $json.userMessage }}"
+              "content": "={{ $json.verifyPrompt }}"
             }
           ]
         },
-        "builtInTools": {},
+        "builtInTools": {
+          "codeInterpreter": true
+        },
         "options": {
-          "maxTokens": 4096,
-          "temperature": 0.1
+          "maxTokens": 4096
         }
       },
       "type": "@n8n/n8n-nodes-langchain.openAi",
@@ -194,7 +173,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parse the verification LLM response and produce final output\nconst data = $input.first().json;\nconst originalResult = $('Prepare Verification Prompt').first().json;\n\n// If verification was skipped (no lines to verify), pass through\nif (!originalResult.needsVerification) {\n  return [{ json: originalResult }];\n}\n\nlet aiText = '';\ntry {\n  aiText = data.text || (data.output && data.output[0] && data.output[0].content && data.output[0].content[0] && data.output[0].content[0].text) || (data.choices && data.choices[0].message.content) || '';\n  if (!aiText) throw new Error('Empty response');\n} catch (e) {\n  // Verification failed — fall back to original extraction\n  const orig = originalResult.originalParseResult;\n  orig.verificationError = 'Failed to parse verification response: ' + e.message;\n  return [{ json: orig }];\n}\n\nlet jsonStr = aiText.trim();\nif (jsonStr.startsWith('```')) {\n  jsonStr = jsonStr.replace(/^```(?:json)?\\\\n?/, '').replace(/\\\\n?```$/, '');\n}\n\nlet verified;\ntry {\n  verified = JSON.parse(jsonStr);\n} catch (e) {\n  const orig = originalResult.originalParseResult;\n  orig.verificationError = 'Invalid JSON from verification: ' + e.message;\n  return [{ json: orig }];\n}\n\nif (!Array.isArray(verified)) {\n  const orig = originalResult.originalParseResult;\n  orig.verificationError = 'Verification did not return an array';\n  return [{ json: orig }];\n}\n\n// Build final order lines from verified data\nconst orderLines = verified.map(line => ({\n  sourceSheet: 'Sheet1',\n  sourceRow: null,\n  pharmacyId: line.pharmacyId || null,\n  pharmacyName: line.pharmacyName || null,\n  drugCode: line.drugCode ? String(line.drugCode) : null,\n  articleName: line.articleName ? String(line.articleName) : null,\n  quantity: Number(line.quantity) || 1,\n  unit: line.unit || 'kom',\n  discount: line.discount != null ? (Number(line.discount) || 0) : 0,\n  notes: '',\n  parseMethod: 'AI_VERIFIED',\n  parseConfidence: 0.9,\n  rawData: line\n}));\n\nreturn [{\n  json: {\n    matched: orderLines.length > 0,\n    lineCount: orderLines.length,\n    parseMethod: 'AI_VERIFIED',\n    orderLines: orderLines\n  }\n}];\n"
+        "jsCode": "// Parse the verification LLM response and produce final output\nconst data = $input.first().json;\nconst originalResult = $('Parse AI Response').first().json;\n\n// If extraction failed, pass through\nif (!originalResult.matched || !originalResult.orderLines || originalResult.orderLines.length === 0) {\n  return [{ json: originalResult }];\n}\n\nlet aiText = '';\ntry {\n  aiText = (typeof data.text === 'string' && data.text)\n    || (data.output && data.output.find(o => o.type === 'message')?.content?.[0]?.text)\n    || (data.output && data.output[0]?.content?.[0]?.text)\n    || '';\n  if (!aiText) throw new Error('Empty response');\n} catch (e) {\n  // Verification failed — fall back to original extraction\n  originalResult.verificationError = 'Failed to parse verification response: ' + e.message;\n  return [{ json: originalResult }];\n}\n\nlet jsonStr = aiText.trim();\nif (jsonStr.startsWith('```')) {\n  jsonStr = jsonStr.replace(/^```(?:json)?\\n?/, '').replace(/\\n?```$/, '');\n}\n\nlet verified;\ntry {\n  verified = JSON.parse(jsonStr);\n} catch (e) {\n  const match = jsonStr.match(/\\[[\\s\\S]*\\]/);\n  if (match) {\n    try { verified = JSON.parse(match[0]); }\n    catch (e2) {\n      originalResult.verificationError = 'Invalid JSON from verification: ' + e.message;\n      return [{ json: originalResult }];\n    }\n  } else {\n    originalResult.verificationError = 'Invalid JSON from verification: ' + e.message;\n    return [{ json: originalResult }];\n  }\n}\n\nif (!Array.isArray(verified)) {\n  originalResult.verificationError = 'Verification did not return an array';\n  return [{ json: originalResult }];\n}\n\n// Build final order lines from verified data\nconst orderLines = verified.map(line => ({\n  sourceSheet: line.sourceSheet || 'Sheet1',\n  sourceRow: null,\n  pharmacyId: line.pharmacyId || null,\n  pharmacyName: line.pharmacyName || null,\n  drugCode: line.drugCode ? String(line.drugCode) : null,\n  articleName: line.articleName ? String(line.articleName) : null,\n  quantity: Number(line.quantity) || 1,\n  unit: line.unit || 'kom',\n  discount: line.discount != null ? (Number(line.discount) || 0) : 0,\n  notes: '',\n  parseMethod: 'AI_VERIFIED',\n  parseConfidence: 0.9,\n  rawData: line\n}));\n\nreturn [{\n  json: {\n    matched: orderLines.length > 0,\n    lineCount: orderLines.length,\n    parseMethod: 'AI_VERIFIED',\n    orderLines: orderLines\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -204,6 +183,41 @@
       ],
       "id": "f3000000-0000-4000-8000-000000000010",
       "name": "Parse Verified Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// The IF node drops binary data. Re-attach the original XLSX binary\n// from the Sub-Workflow Input trigger so the Upload node can use it.\nconst binary = $('Sub-Workflow Input').first().binary || {};\nconst detectResult = $input.first().json;\n\nif (!binary.data) {\n  throw new Error('No XLSX binary found on Sub-Workflow Input');\n}\n\nreturn [{\n  json: detectResult,\n  binary: { data: binary.data }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        112
+      ],
+      "id": "f3000000-0000-4000-8000-000000000011",
+      "name": "Re-attach XLSX Binary"
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "options": {
+          "purpose": "user_data"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        1216,
+        112
+      ],
+      "id": "f3000000-0000-4000-8000-000000000012",
+      "name": "Upload XLSX to OpenAI",
+      "credentials": {
+        "openAiApi": {
+          "id": "eD10IPhcxdI4yu0p",
+          "name": "OpenAi account"
+        }
+      }
     }
   ],
   "connections": {
@@ -245,18 +259,7 @@
         [],
         [
           {
-            "node": "Prepare AI Prompt",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare AI Prompt": {
-      "main": [
-        [
-          {
-            "node": "LLM: Extract Order Lines",
+            "node": "Re-attach XLSX Binary",
             "type": "main",
             "index": 0
           }
@@ -278,17 +281,6 @@
       "main": [
         [
           {
-            "node": "Prepare Verification Prompt",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Verification Prompt": {
-      "main": [
-        [
-          {
             "node": "LLM: Verify Extraction",
             "type": "main",
             "index": 0
@@ -301,6 +293,28 @@
         [
           {
             "node": "Parse Verified Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Re-attach XLSX Binary": {
+      "main": [
+        [
+          {
+            "node": "Upload XLSX to OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload XLSX to OpenAI": {
+      "main": [
+        [
+          {
+            "node": "LLM: Extract Order Lines",
             "type": "main",
             "index": 0
           }

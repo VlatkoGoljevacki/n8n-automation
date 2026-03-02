@@ -4,39 +4,23 @@
   "nodes": [
     {
       "parameters": {
-        "pollTimes": {
-          "item": [
+        "rule": {
+          "interval": [
             {
-              "mode": "everyMinute"
+              "field": "minutes",
+              "minutesInterval": 1
             }
           ]
-        },
-        "output": "raw",
-        "filters": {
-          "hasAttachments": true,
-          "foldersToInclude": [
-            "AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l-fZwFAQBhdL-ANklNR6oMNJhB5iOiAAACAQwAAAA="
-          ],
-          "readStatus": "unread"
-        },
-        "options": {
-          "downloadAttachments": true
         }
       },
-      "type": "n8n-nodes-base.microsoftOutlookTrigger",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
       "position": [
-        -544,
+        -784,
         0
       ],
-      "id": "b1000000-0000-4000-8000-000000000001",
-      "name": "New Email Received",
-      "credentials": {
-        "microsoftOutlookOAuth2Api": {
-          "id": "jzzDNHXRz5JAGlpl",
-          "name": "Microsoft Outlook account"
-        }
-      }
+      "id": "b1000000-0000-4000-8000-000000000090",
+      "name": "Poll Every Minute"
     },
     {
       "parameters": {
@@ -110,9 +94,7 @@
             }
           ]
         },
-        "options": {
-          "includeBinary": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
@@ -682,17 +664,6 @@
       "name": "Rejected"
     },
     {
-      "parameters": {},
-      "type": "n8n-nodes-base.limit",
-      "typeVersion": 1,
-      "position": [
-        -288,
-        0
-      ],
-      "id": "b1000000-0000-4000-8000-000000000080",
-      "name": "Process 1 Email"
-    },
-    {
       "parameters": {
         "operation": "update",
         "messageId": {
@@ -712,6 +683,7 @@
       ],
       "id": "b1000000-0000-4000-8000-000000000070",
       "name": "Mark as Read",
+      "webhookId": "7062b306-8abb-42fe-ad46-5feccf01c716",
       "credentials": {
         "microsoftOutlookOAuth2Api": {
           "id": "jzzDNHXRz5JAGlpl",
@@ -803,21 +775,57 @@
           "name": "Microsoft Outlook account"
         }
       }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "limit": 1,
+        "output": "raw",
+        "filtersUI": {
+          "values": {
+            "filters": {
+              "hasAttachments": true,
+              "readStatus": "unread",
+              "foldersToInclude": [
+                "AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l-fZwFAQBhdL-ANklNR6oMNJhB5iOiAAACAQwAAAA="
+              ]
+            }
+          }
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        -528,
+        0
+      ],
+      "id": "7ccc76d3-062a-427c-b7aa-6fc833ab27c2",
+      "name": "New Email Received",
+      "webhookId": "ecb89380-9fb9-480f-a9df-49fb1fff8ddf",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "jzzDNHXRz5JAGlpl",
+          "name": "Microsoft Outlook account"
+        }
+      }
     }
   ],
   "connections": {
-    "New Email Received": {
+    "Poll Every Minute": {
       "main": [
         [
           {
-            "node": "Process 1 Email",
+            "node": "New Email Received",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Process 1 Email": {
+    "New Email Received": {
       "main": [
         [
           {
