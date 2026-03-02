@@ -472,10 +472,67 @@ Fallback for when XLSX doesn't contain pharmacy identifiers. Used by WF-02.
 
 ## Audit Trail
 
-### Dual-layer approach
+### Requirements
 
-1. **n8n execution history** (built-in): Every run logged automatically. Increase retention: `EXECUTIONS_DATA_MAX_AGE=8760` (1 year).
-2. **Structured audit log**: HTTP Request nodes at each state transition POST to an audit endpoint. **Phase 1**: this can be a simple n8n DataTable or a lightweight webhook workflow that appends to a Google Sheet / JSON file. **Later**: extract to a dedicated audit service if query complexity demands it.
+```
+Audit i praćenje — sustav mora imati:
+- log svih zaprimljenih mailova
+- status obrade (processed / error / pending confirmation)
+- evidenciju svih iznimaka
+```
+
+### Architecture: Sub-workflow + JSONL file
+
+**WF-Audit** — a fire-and-forget sub-workflow called from the orchestrator at each state transition.
+
+```
+Orchestrator → Execute Workflow("WF-Audit", waitForSubWorkflow: false)
+```
+
+The audit call is **non-blocking** — the main workflow dispatches the event and immediately continues processing. No performance impact.
+
+**Storage** — two separate files:
+- **`data/audit_log.jsonl`** — append-only event trail. Grows over time, archived/rotated periodically. Write-only during normal flow; read only for debugging/reporting.
+- **`data/processed_emails.jsonl`** — lean idempotency lookup. One entry per email: `{ messageId, status, timestamp }`. Updated on terminal state. Small file, fast to scan.
+
+**Audit event schema**:
+```json
+{
+  "timestamp": "2026-03-02T14:30:00.000Z",
+  "event": "ORDER_RECEIVED",
+  "emailId": "outlook-message-id",
+  "workflowId": "WF-01",
+  "sender": "pharmacy@example.com",
+  "subject": "Prednarudžba - Ljekarna Centar",
+  "status": "processing",
+  "details": { },
+  "executionId": "n8n-execution-id"
+}
+```
+
+### Idempotency (crash recovery)
+
+Problem: If n8n crashes mid-processing (e.g. memory leak), on restart the trigger picks up the same email again (still unread / still in Inbox). Without protection, the email gets processed twice.
+
+Solution: **Check-before-process using `processed_emails.jsonl`**.
+
+1. First thing the orchestrator does: scan `processed_emails.jsonl` for the email's `messageId`
+2. If found with terminal status (`completed`, `rejected`, `error`) → **skip** (mark as read, move to Processed, done)
+3. If found with `processing` status → previous attempt crashed → **re-process**
+4. If not found → **new email**, add entry with `processing` status, proceed normally
+
+On terminal state (success or failure), update the entry in `processed_emails.jsonl` to the final status.
+
+The audit trail (`audit_log.jsonl`) is separate — it only records events, never queried during normal processing.
+
+Implementation in WF-01 orchestrator:
+```
+[Outlook Trigger] → [Check Processed Emails (Code node: scan JSONL for messageId)]
+  → Already terminal? → Mark as read + Move to Processed → END
+  → New or crashed? → Write "processing" entry → Log ORDER_RECEIVED → Continue normal flow
+  → ... pipeline ... →
+  → On terminal state → Update entry to final status
+```
 
 ### Status states
 
@@ -490,6 +547,23 @@ Failure branches:
   → REJECTED (terminal)
   → SUBMISSION_FAILED (terminal)
 ```
+
+### Hook points in orchestrator
+
+| Step | Event | Status |
+|------|-------|--------|
+| Email received | `ORDER_RECEIVED` | processing |
+| After WF-02 (sender valid) | `SENDER_VALIDATED` | processing |
+| After WF-02 (sender invalid) | `SENDER_INVALID` | error |
+| After WF-03 (parse OK) | `PARSED` | processing |
+| After WF-03 (parse fail) | `PARSE_FAILED` | error |
+| After WF-04 (validation) | `ARTICLES_VALIDATED` | processing |
+| Approval email sent | `PENDING_APPROVAL` | pending_confirmation |
+| Approved | `APPROVED` | processing |
+| Rejected | `REJECTED` | error |
+| After WF-06 (submitted) | `ORDER_SUBMITTED` | processed |
+| Pipeline complete | `COMPLETED` | processed |
+| WF-00 Error Handler | `UNHANDLED_ERROR` | error |
 
 ---
 
