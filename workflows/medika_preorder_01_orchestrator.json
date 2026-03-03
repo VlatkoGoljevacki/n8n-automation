@@ -16,11 +16,112 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        1280,
-        -16
+        1472,
+        -304
       ],
       "id": "b1000000-0000-4000-8000-000000000090",
       "name": "Poll Every Minute"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "limit": 10,
+        "output": "raw",
+        "filtersUI": {
+          "values": {
+            "filters": {
+              "hasAttachments": true,
+              "foldersToInclude": [
+                "AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l-fZwFAQBhdL-ANklNR6oMNJhB5iOiAAACAQwAAAA="
+              ],
+              "readStatus": "unread"
+            }
+          }
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        1728,
+        -304
+      ],
+      "id": "7ccc76d3-062a-427c-b7aa-6fc833ab27c2",
+      "name": "Fetch Email Batch",
+      "webhookId": "ecb89380-9fb9-480f-a9df-49fb1fff8ddf",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "jzzDNHXRz5JAGlpl",
+          "name": "Microsoft Outlook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.microsoft.com/v1.0/me/messages/{{ $json.id }}/move",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftOutlookOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"destinationId\": \"AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l-fZwFAQBhdL-ANklNR6oMNJhB5iOiAAAB7sV-AAAA\" }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1968,
+        -304
+      ],
+      "id": "b1000000-0000-4000-8000-000000000100",
+      "name": "Move to Processing",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "jzzDNHXRz5JAGlpl",
+          "name": "Microsoft Outlook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2240,
+        -16
+      ],
+      "id": "b1000000-0000-4000-8000-000000000102",
+      "name": "SplitInBatches"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "messageId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "output": "raw",
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        2360,
+        -16
+      ],
+      "id": "b1000000-0000-4000-8000-000000000104",
+      "name": "Fetch Email",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "jzzDNHXRz5JAGlpl",
+          "name": "Microsoft Outlook account"
+        }
+      }
     },
     {
       "parameters": {
@@ -81,8 +182,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        2096,
-        -16
+        2496,
+        -96
       ],
       "id": "b1000000-0000-4000-8000-000000000040",
       "name": "Config"
@@ -99,8 +200,8 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        2336,
-        -16
+        2736,
+        -96
       ],
       "id": "b1000000-0000-4000-8000-000000000095",
       "name": "WF-00b: Get Token",
@@ -113,31 +214,31 @@
             {
               "id": "c1000001-0000-4000-8000-000000000002",
               "name": "senderEmail",
-              "value": "={{ $('New Email Received').first().json.from.emailAddress.address }}",
+              "value": "={{ $('Fetch Email').first().json.from.emailAddress.address }}",
               "type": "string"
             },
             {
               "id": "c1000001-0000-4000-8000-000000000004",
               "name": "emailSubject",
-              "value": "={{ $('New Email Received').first().json.subject }}",
+              "value": "={{ $('Fetch Email').first().json.subject }}",
               "type": "string"
             },
             {
               "id": "c1000001-0000-4000-8000-000000000005",
               "name": "emailId",
-              "value": "={{ $('New Email Received').first().json.id }}",
+              "value": "={{ $('Fetch Email').first().json.id }}",
               "type": "string"
             },
             {
               "id": "c1000001-0000-4000-8000-000000000006",
               "name": "hasAttachments",
-              "value": "={{ $('New Email Received').first().json.hasAttachments }}",
+              "value": "={{ $('Fetch Email').first().json.hasAttachments }}",
               "type": "boolean"
             },
             {
               "id": "c1000001-0000-4000-8000-000000000007",
               "name": "receivedAt",
-              "value": "={{ $('New Email Received').first().json.receivedDateTime }}",
+              "value": "={{ $('Fetch Email').first().json.receivedDateTime }}",
               "type": "string"
             }
           ]
@@ -147,8 +248,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        2640,
-        0
+        3040,
+        -96
       ],
       "id": "b1000000-0000-4000-8000-000000000002",
       "name": "Extract Email Metadata"
@@ -187,7 +288,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Re-attach binary data from trigger and carry config\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\n\nconst binary = $('New Email Received').first().binary || {};\nconst binaryKeys = Object.keys(binary);\nconst renamedBinary = {};\nif (binaryKeys.length > 0) {\n  renamedBinary.data = binary[binaryKeys[0]];\n  for (let i = 1; i < binaryKeys.length; i++) {\n    renamedBinary[binaryKeys[i]] = binary[binaryKeys[i]];\n  }\n}\n\nreturn [{\n  json: {\n    config: config,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    businessCenter: config.businessCenterDefault,\n    defaultDiscountPerc: config.defaultDiscountPerc\n  },\n  binary: renamedBinary\n}];\n"
+        "jsCode": "// Re-attach binary data from trigger and carry config\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\n\nconst binary = $('Fetch Email').first().binary || {};\nconst binaryKeys = Object.keys(binary);\nconst renamedBinary = {};\nif (binaryKeys.length > 0) {\n  renamedBinary.data = binary[binaryKeys[0]];\n  for (let i = 1; i < binaryKeys.length; i++) {\n    renamedBinary[binaryKeys[i]] = binary[binaryKeys[i]];\n  }\n}\n\nreturn [{\n  json: {\n    config: config,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    businessCenter: config.businessCenterDefault,\n    defaultDiscountPerc: config.defaultDiscountPerc\n  },\n  binary: renamedBinary\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -302,7 +403,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        5520,
+        5856,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000026",
@@ -316,7 +417,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4800,
+        4832,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000032",
@@ -334,7 +435,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        5040,
+        5216,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000028",
@@ -343,12 +444,12 @@
     },
     {
       "parameters": {
-        "jsCode": "const submissionResult = $input.first().json;\nconst submissionInput = $('Prepare Submission Input').first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\n\nconst emailBody = $('New Email Received').first().json.body || {};\n\nconst binary = $('New Email Received').first().binary || {};\nconst binaryKeys = Object.keys(binary);\nconst attachmentBinary = {};\nif (binaryKeys.length > 0) {\n  attachmentBinary.data = binary[binaryKeys[0]];\n}\n\nreturn [{\n  json: {\n    config: config,\n    submissionResult: submissionResult,\n    validatedLines: submissionInput.validatedLines,\n    invalidLines: submissionInput.invalidLines,\n    summary: submissionInput.summary,\n    lineCount: submissionInput.lineCount,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    businessCenter: submissionInput.businessCenter,\n    emailBodyHtml: emailBody.content || ''\n  },\n  binary: attachmentBinary\n}];\n"
+        "jsCode": "const submissionResult = $input.first().json;\nconst submissionInput = $('Prepare Submission Input').first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\n\nconst emailBody = $('Fetch Email').first().json.body || {};\n\nconst binary = $('Fetch Email').first().binary || {};\nconst binaryKeys = Object.keys(binary);\nconst attachmentBinary = {};\nif (binaryKeys.length > 0) {\n  attachmentBinary.data = binary[binaryKeys[0]];\n}\n\nreturn [{\n  json: {\n    config: config,\n    submissionResult: submissionResult,\n    validatedLines: submissionInput.validatedLines,\n    invalidLines: submissionInput.invalidLines,\n    summary: submissionInput.summary,\n    lineCount: submissionInput.lineCount,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    businessCenter: submissionInput.businessCenter,\n    emailBodyHtml: emailBody.content || ''\n  },\n  binary: attachmentBinary\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        5280,
+        5552,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000033",
@@ -370,7 +471,7 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        4320,
+        4336,
         -80
       ],
       "id": "b1000000-0000-4000-8000-000000000030",
@@ -381,7 +482,7 @@
         "operation": "update",
         "messageId": {
           "__rl": true,
-          "value": "={{ $input.first().json.id }}",
+          "value": "={{ $('Extract Email Metadata').first().json.emailId }}",
           "mode": "id"
         },
         "updateFields": {
@@ -391,8 +492,8 @@
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        1840,
-        -16
+        6176,
+        -272
       ],
       "id": "b1000000-0000-4000-8000-000000000070",
       "name": "Mark as Read",
@@ -420,8 +521,8 @@
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        5760,
-        -272
+        6560,
+        288
       ],
       "id": "b1000000-0000-4000-8000-000000000071",
       "name": "Move to Processed",
@@ -448,48 +549,12 @@
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        6512,
-        144
+        6880,
+        0
       ],
       "id": "b1000000-0000-4000-8000-000000000072",
       "name": "Move to Error",
       "webhookId": "fcc63d92-044d-45e8-870d-699d33661036",
-      "credentials": {
-        "microsoftOutlookOAuth2Api": {
-          "id": "jzzDNHXRz5JAGlpl",
-          "name": "Microsoft Outlook account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "getAll",
-        "limit": 1,
-        "output": "raw",
-        "filtersUI": {
-          "values": {
-            "filters": {
-              "hasAttachments": true,
-              "foldersToInclude": [
-                "AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l-fZwFAQBhdL-ANklNR6oMNJhB5iOiAAACAQwAAAA="
-              ],
-              "readStatus": "unread"
-            }
-          }
-        },
-        "options": {
-          "downloadAttachments": true
-        }
-      },
-      "type": "n8n-nodes-base.microsoftOutlook",
-      "typeVersion": 2,
-      "position": [
-        1520,
-        -16
-      ],
-      "id": "7ccc76d3-062a-427c-b7aa-6fc833ab27c2",
-      "name": "New Email Received",
-      "webhookId": "ecb89380-9fb9-480f-a9df-49fb1fff8ddf",
       "credentials": {
         "microsoftOutlookOAuth2Api": {
           "id": "jzzDNHXRz5JAGlpl",
@@ -707,7 +772,7 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        6512,
+        6576,
         -608
       ],
       "id": "b1000000-0000-4000-8000-000000000089",
@@ -719,25 +784,48 @@
       "main": [
         [
           {
-            "node": "New Email Received",
+            "node": "Fetch Email Batch",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "New Email Received": {
+    "Fetch Email Batch": {
       "main": [
         [
           {
-            "node": "Mark as Read",
+            "node": "Move to Processing",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Mark as Read": {
+    "Move to Processing": {
+      "main": [
+        [
+          {
+            "node": "SplitInBatches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SplitInBatches": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Fetch Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Email": {
       "main": [
         [
           {
@@ -898,7 +986,29 @@
       "main": [
         [
           {
+            "node": "Mark as Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark as Read": {
+      "main": [
+        [
+          {
             "node": "Move to Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Move to Processed": {
+      "main": [
+        [
+          {
+            "node": "SplitInBatches",
             "type": "main",
             "index": 0
           }
@@ -921,6 +1031,17 @@
         [
           {
             "node": "Move to Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Move to Error": {
+      "main": [
+        [
+          {
+            "node": "SplitInBatches",
             "type": "main",
             "index": 0
           }
