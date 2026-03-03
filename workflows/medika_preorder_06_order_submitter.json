@@ -59,7 +59,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build Medika SaveTransferOrder request payload\nconst input = $('Sub-Workflow Input').first().json;\nconst config = input.config || {};\nconst lines = input.validatedLines || [];\n\nconst submittableLines = lines.filter(l => l.articleId && l.valid !== false);\nconst skippedLines = lines.filter(l => !l.articleId || l.valid === false);\n\nconst orderPayload = {\n  BusinessCenter: input.businessCenter || config.businessCenterDefault || '10',\n  Customer: input.customer || '',\n  DeliveryPlace: input.deliveryPlace || '',\n  CustomerOrderNumber: 'MP-' + (input.emailId || '').substring(0, 8) + '-' + Date.now(),\n  CustomerOrderDate: (input.receivedAt || new Date().toISOString()).split('T')[0],\n  Text: input.emailSubject || 'Prednarudžba',\n  Items: submittableLines.map(line => ({\n    ArticleID: String(line.articleId),\n    ArticleDescCustomer: line.articleName || '',\n    Quantity: parseFloat(line.quantity) || 0,\n    DiscountPerc: parseFloat(line.discountPerc) || 0.0,\n    Message: line.notes || ''\n  }))\n};\n\nreturn [{\n  json: {\n    config: config,\n    accessToken: $('WF-00b: Get Token').first().json.accessToken,\n    orderPayload: orderPayload,\n    submittedLineCount: submittableLines.length,\n    skippedLineCount: skippedLines.length,\n    skippedLines: skippedLines\n  }\n}];\n"
+        "jsCode": "// Build one SaveTransferOrder payload per unique (customer, deliveryPlace)\nconst input = $('Sub-Workflow Input').first().json;\nconst config = input.config || {};\nconst lines = input.validatedLines || [];\n\nconst submittableLines = lines.filter(l => l.articleId && l.valid !== false);\nconst skippedLines = lines.filter(l => !l.articleId || l.valid === false);\n\n// Group submittable lines by (customer, deliveryPlace)\nconst groups = {};\nfor (const line of submittableLines) {\n  const custId = line.customer || '';\n  const dpId = line.deliveryPlace || '';\n  const key = custId + '|' + dpId;\n  if (!groups[key]) {\n    groups[key] = { customer: custId, deliveryPlace: dpId, customerName: line.customerName || '', lines: [] };\n  }\n  groups[key].lines.push(line);\n}\n\nconst groupKeys = Object.keys(groups);\nconst accessToken = $('WF-00b: Get Token').first().json.accessToken;\nconst baseOrderNum = 'MP-' + (input.emailId || '').substring(0, 8) + '-' + Date.now();\nconst orderDate = (input.receivedAt || new Date().toISOString()).split('T')[0];\n\nreturn groupKeys.map((key, idx) => {\n  const g = groups[key];\n  const orderNum = groupKeys.length > 1 ? baseOrderNum + '-' + (idx + 1) : baseOrderNum;\n  return {\n    json: {\n      accessToken: accessToken,\n      orderPayload: {\n        BusinessCenter: input.businessCenter || config.businessCenterDefault || '10',\n        Customer: g.customer,\n        DeliveryPlace: g.deliveryPlace,\n        CustomerOrderNumber: orderNum,\n        CustomerOrderDate: orderDate,\n        Text: input.emailSubject || 'Prednarudžba',\n        Items: g.lines.map(line => ({\n          ArticleID: String(line.articleId),\n          ArticleDescCustomer: line.articleName || '',\n          Quantity: parseFloat(line.quantity) || 0,\n          DiscountPerc: parseFloat(line.discountPerc) || 0.0,\n          Message: line.notes || ''\n        }))\n      },\n      customerName: g.customerName,\n      groupIndex: idx + 1,\n      totalGroups: groupKeys.length,\n      lineCount: g.lines.length,\n      skippedLineCount: idx === 0 ? skippedLines.length : 0,\n      skippedLines: idx === 0 ? skippedLines : []\n    }\n  };\n});\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -68,7 +68,21 @@
         -304
       ],
       "id": "f6000000-0000-4000-8000-000000000002",
-      "name": "Build API Payload"
+      "name": "Build API Payloads"
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1280,
+        -304
+      ],
+      "id": "f6000000-0000-4000-8000-000000000030",
+      "name": "Loop Each Customer"
     },
     {
       "parameters": {
@@ -97,24 +111,55 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1440,
+        1568,
         -304
       ],
       "id": "f6000000-0000-4000-8000-000000000003",
-      "name": "Submit Order to API"
+      "name": "Submit Order to API",
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// Process Medika SaveTransferOrder response\nconst apiResponse = $input.first().json;\nconst buildResult = $('Build API Payload').first().json;\n\nreturn [{\n  json: {\n    submitted: true,\n    orderId: apiResponse.OrderID || null,\n    status: apiResponse.Status || null,\n    statusText: apiResponse.Status === 1 ? 'Received' : apiResponse.Status === 2 ? 'In process' : apiResponse.Status === 3 ? 'Processed' : 'Unknown',\n    customerOrderNumber: apiResponse.CustomerOrderNumber || buildResult.orderPayload.CustomerOrderNumber,\n    submittedLineCount: buildResult.submittedLineCount,\n    skippedLineCount: buildResult.skippedLineCount,\n    apiResponse: apiResponse,\n    submittedAt: new Date().toISOString()\n  }\n}];\n"
+        "jsCode": "// Process SaveTransferOrder response for current customer\nconst apiResponse = $input.first().json;\n\n// Check if this is an error response (from onError: continueRegularOutput)\nconst isError = !!apiResponse.error || !!apiResponse.errorMessage;\n\nif (isError) {\n  return [{\n    json: {\n      submitted: false,\n      error: apiResponse.error || apiResponse.errorMessage || 'Unknown API error',\n      customerOrderNumber: apiResponse.CustomerOrderNumber || '',\n      submittedAt: new Date().toISOString()\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    submitted: true,\n    orderId: apiResponse.OrderID || null,\n    status: apiResponse.Status || null,\n    statusText: apiResponse.Status === 1 ? 'Received' : apiResponse.Status === 2 ? 'In process' : apiResponse.Status === 3 ? 'Processed' : 'Unknown',\n    customerOrderNumber: apiResponse.CustomerOrderNumber || '',\n    apiResponse: apiResponse,\n    submittedAt: new Date().toISOString()\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1936,
+        1856,
         -304
       ],
       "id": "f6000000-0000-4000-8000-000000000004",
       "name": "Process API Response"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "results",
+        "include": "allFieldsExcept",
+        "fieldsToExclude": "accessToken",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        -100
+      ],
+      "id": "f6000000-0000-4000-8000-000000000031",
+      "name": "Aggregate Results"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build single summary output from all customer order results\nconst results = $input.first().json.results || [];\n\nconst successes = results.filter(r => r.submitted);\nconst failures = results.filter(r => !r.submitted);\n\nreturn [{\n  json: {\n    submitted: failures.length === 0 && successes.length > 0,\n    totalGroups: results.length,\n    successCount: successes.length,\n    failedCount: failures.length,\n    orders: successes.map(r => ({\n      orderId: r.orderId,\n      customerOrderNumber: r.customerOrderNumber,\n      status: r.status,\n      statusText: r.statusText\n    })),\n    errors: failures.map(r => ({\n      customerOrderNumber: r.customerOrderNumber,\n      error: r.error\n    })),\n    submittedAt: new Date().toISOString()\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1856,
+        -100
+      ],
+      "id": "f6000000-0000-4000-8000-000000000032",
+      "name": "Build Order Summary"
     },
     {
       "parameters": {
@@ -157,15 +202,33 @@
       "main": [
         [
           {
-            "node": "Build API Payload",
+            "node": "Build API Payloads",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Build API Payload": {
+    "Build API Payloads": {
       "main": [
+        [
+          {
+            "node": "Loop Each Customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Each Customer": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "Submit Order to API",
@@ -180,6 +243,28 @@
         [
           {
             "node": "Process API Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Results": {
+      "main": [
+        [
+          {
+            "node": "Build Order Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process API Response": {
+      "main": [
+        [
+          {
+            "node": "Loop Each Customer",
             "type": "main",
             "index": 0
           }

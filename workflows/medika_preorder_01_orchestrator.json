@@ -155,57 +155,6 @@
     },
     {
       "parameters": {
-        "workflowId": {
-          "__rl": true,
-          "mode": "id",
-          "value": "htd4mmeSLhFXW2W9"
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.2,
-      "position": [
-        2880,
-        0
-      ],
-      "id": "b1000000-0000-4000-8000-000000000010",
-      "name": "WF-02: Validate Sender",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "d1000002-0000-4000-8000-000000000001",
-              "leftValue": "={{ $json.valid }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "true"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        3120,
-        0
-      ],
-      "id": "b1000000-0000-4000-8000-000000000011",
-      "name": "Sender Valid?"
-    },
-    {
-      "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
@@ -238,7 +187,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Re-attach binary data from trigger and carry config + customer data\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst sv = $('WF-02: Validate Sender').first().json;\nconst config = $('Config').first().json;\n\n// Get binary directly from trigger node (binary gets dropped by Set/IF/Execute nodes)\nconst binary = $('New Email Received').first().binary || {};\nconst binaryKeys = Object.keys(binary);\nconst renamedBinary = {};\nif (binaryKeys.length > 0) {\n  // Rename first attachment to 'data' for Spreadsheet File node\n  renamedBinary.data = binary[binaryKeys[0]];\n  for (let i = 1; i < binaryKeys.length; i++) {\n    renamedBinary[binaryKeys[i]] = binary[binaryKeys[i]];\n  }\n}\n\nreturn [{\n  json: {\n    config: config,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    senderName: sv.senderName || '',\n    customer: sv.customer || null,\n    deliveryPlace: sv.deliveryPlace || null,\n    businessCenter: sv.businessCenter || config.businessCenterDefault,\n    defaultDiscountPerc: sv.defaultDiscountPerc || config.defaultDiscountPerc\n  },\n  binary: renamedBinary\n}];\n"
+        "jsCode": "// Re-attach binary data from trigger and carry config\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\n\nconst binary = $('New Email Received').first().binary || {};\nconst binaryKeys = Object.keys(binary);\nconst renamedBinary = {};\nif (binaryKeys.length > 0) {\n  renamedBinary.data = binary[binaryKeys[0]];\n  for (let i = 1; i < binaryKeys.length; i++) {\n    renamedBinary[binaryKeys[i]] = binary[binaryKeys[i]];\n  }\n}\n\nreturn [{\n  json: {\n    config: config,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    businessCenter: config.businessCenterDefault,\n    defaultDiscountPerc: config.defaultDiscountPerc\n  },\n  binary: renamedBinary\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -311,7 +260,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Prepare input for data validation with customer lookup from DataTable\nconst lookupResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json;\n\nreturn [{\n  json: {\n    config: config,\n    orderLines: lookupResult.orderLines || [],\n    lineCount: lookupResult.lineCount || 0,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    customer: parserInput.customer,\n    deliveryPlace: parserInput.deliveryPlace,\n    defaultDiscountPerc: parserInput.defaultDiscountPerc,\n    customerLookup: lookupResult.customerLookup\n  }\n}];"
+        "jsCode": "// Prepare input for data validation with customer lookup from DataTable\nconst lookupResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json;\n\nreturn [{\n  json: {\n    config: config,\n    orderLines: lookupResult.orderLines || [],\n    lineCount: lookupResult.lineCount || 0,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    defaultDiscountPerc: parserInput.defaultDiscountPerc,\n    customerLookup: lookupResult.customerLookup\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -343,7 +292,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Merge validation results with config for approval (no customerLookup — too large, not needed after validation)\nconst validationResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json;\n\n// Strip rawData from validated lines to reduce payload size\nconst cleanedLines = (validationResult.validatedLines || []).map(line => {\n  const { rawData, ...rest } = line;\n  return rest;\n});\n\nreturn [{\n  json: {\n    config: config,\n    validated: validationResult.validated,\n    lineCount: validationResult.lineCount,\n    summary: validationResult.summary,\n    validatedLines: cleanedLines,\n    invalidLines: (validationResult.invalidLines || []).map(line => {\n      const { rawData, ...rest } = line;\n      return rest;\n    }),\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    customer: parserInput.customer,\n    deliveryPlace: parserInput.deliveryPlace,\n    businessCenter: parserInput.businessCenter\n  }\n}];\n"
+        "jsCode": "// Merge validation results with config for approval (no customerLookup — too large, not needed after validation)\nconst validationResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json;\n\nconst cleanedLines = (validationResult.validatedLines || []).map(line => {\n  const { rawData, ...rest } = line;\n  return rest;\n});\n\nreturn [{\n  json: {\n    config: config,\n    validated: validationResult.validated,\n    lineCount: validationResult.lineCount,\n    summary: validationResult.summary,\n    validatedLines: cleanedLines,\n    invalidLines: (validationResult.invalidLines || []).map(line => {\n      const { rawData, ...rest } = line;\n      return rest;\n    }),\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    businessCenter: parserInput.businessCenter\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -453,17 +402,6 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        3360,
-        112
-      ],
-      "id": "b1000000-0000-4000-8000-000000000012",
-      "name": "Sender Rejected"
-    },
-    {
-      "parameters": {},
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [
         4320,
         -80
       ],
@@ -531,34 +469,6 @@
       "id": "b1000000-0000-4000-8000-000000000071",
       "name": "Move to Processed",
       "webhookId": "492e9eae-734a-4a72-9da8-b0c62db31f7c",
-      "credentials": {
-        "microsoftOutlookOAuth2Api": {
-          "id": "jzzDNHXRz5JAGlpl",
-          "name": "Microsoft Outlook account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "move",
-        "messageId": "={{ $('Extract Email Metadata').item.json.emailId }}",
-        "folderId": {
-          "__rl": true,
-          "value": "AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l-fZwFAQBhdL-ANklNR6oMNJhB5iOiAAAB7sWGAAAA",
-          "mode": "list",
-          "cachedResultName": "Invalid",
-          "cachedResultUrl": "https://outlook.office365.com/mail/AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l%2FfZwFAQBhdL%2FANklNR6oMNJhB5iOiAAAB7sWGAAAA"
-        }
-      },
-      "type": "n8n-nodes-base.microsoftOutlook",
-      "typeVersion": 2,
-      "position": [
-        3600,
-        208
-      ],
-      "id": "b1000000-0000-4000-8000-000000000073",
-      "name": "Move to Invalid",
-      "webhookId": "c02ab9ca-cecf-43e0-a8a3-5ba0cfccee68",
       "credentials": {
         "microsoftOutlookOAuth2Api": {
           "id": "jzzDNHXRz5JAGlpl",
@@ -907,36 +817,7 @@
       "main": [
         [
           {
-            "node": "WF-02: Validate Sender",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "WF-02: Validate Sender": {
-      "main": [
-        [
-          {
-            "node": "Sender Valid?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Sender Valid?": {
-      "main": [
-        [
-          {
             "node": "Has Attachments?",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Sender Rejected",
             "type": "main",
             "index": 0
           }
@@ -1090,17 +971,6 @@
         [
           {
             "node": "Move to Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Sender Rejected": {
-      "main": [
-        [
-          {
-            "node": "Move to Invalid",
             "type": "main",
             "index": 0
           }
