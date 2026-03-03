@@ -52,8 +52,8 @@
             },
             {
               "id": "cfg-008",
-              "name": "approvalNotifyEmail",
-              "value": "",
+              "name": "notifyEmail",
+              "value": "vlatko.goljevacki@gmail.com",
               "type": "string"
             },
             {
@@ -292,77 +292,32 @@
     },
     {
       "parameters": {
-        "jsCode": "// Merge validation results with config for approval (no customerLookup — too large, not needed after validation)\nconst validationResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json;\n\nconst cleanedLines = (validationResult.validatedLines || []).map(line => {\n  const { rawData, ...rest } = line;\n  return rest;\n});\n\nreturn [{\n  json: {\n    config: config,\n    validated: validationResult.validated,\n    lineCount: validationResult.lineCount,\n    summary: validationResult.summary,\n    validatedLines: cleanedLines,\n    invalidLines: (validationResult.invalidLines || []).map(line => {\n      const { rawData, ...rest } = line;\n      return rest;\n    }),\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    businessCenter: parserInput.businessCenter\n  }\n}];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        4800,
-        -272
-      ],
-      "id": "b1000000-0000-4000-8000-000000000025",
-      "name": "Prepare Approval Input"
-    },
-    {
-      "parameters": {
         "workflowId": {
           "__rl": true,
           "mode": "id",
-          "value": "XJknI06WpDQhSDT3"
+          "value": "CaAisJdV6WL3kp6j"
         },
         "options": {}
       },
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        5040,
+        5520,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000026",
-      "name": "WF-05: Approval Gate",
+      "name": "WF-05: Send Order Notification",
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "d1000004-0000-4000-8000-000000000001",
-              "leftValue": "={{ $json.approved }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "true"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        5280,
-        -272
-      ],
-      "id": "b1000000-0000-4000-8000-000000000027",
-      "name": "Approved?"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Pass approval result to WF-06 (WF-06 fetches its own token via WF-00b)\nconst approvalResult = $input.first().json;\nconst config = approvalResult.config || $('Config').first().json;\n\nreturn [{\n  json: {\n    ...approvalResult,\n    config: config\n  }\n}];"
+        "jsCode": "const validationResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json;\n\nconst cleanedLines = (validationResult.validatedLines || []).map(line => {\n  const { rawData, ...rest } = line;\n  return rest;\n});\n\nreturn [{\n  json: {\n    config: config,\n    validated: validationResult.validated,\n    lineCount: validationResult.lineCount,\n    summary: validationResult.summary,\n    validatedLines: cleanedLines,\n    invalidLines: (validationResult.invalidLines || []).map(line => {\n      const { rawData, ...rest } = line;\n      return rest;\n    }),\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    businessCenter: parserInput.businessCenter\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        5808,
-        -368
+        4800,
+        -272
       ],
       "id": "b1000000-0000-4000-8000-000000000032",
       "name": "Prepare Submission Input"
@@ -379,12 +334,25 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        6032,
-        -368
+        5040,
+        -272
       ],
       "id": "b1000000-0000-4000-8000-000000000028",
       "name": "WF-06: Submit Order",
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const submissionResult = $input.first().json;\nconst submissionInput = $('Prepare Submission Input').first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\n\nconst emailBody = $('New Email Received').first().json.body || {};\n\nconst binary = $('New Email Received').first().binary || {};\nconst binaryKeys = Object.keys(binary);\nconst attachmentBinary = {};\nif (binaryKeys.length > 0) {\n  attachmentBinary.data = binary[binaryKeys[0]];\n}\n\nreturn [{\n  json: {\n    config: config,\n    submissionResult: submissionResult,\n    validatedLines: submissionInput.validatedLines,\n    invalidLines: submissionInput.invalidLines,\n    summary: submissionInput.summary,\n    lineCount: submissionInput.lineCount,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    businessCenter: submissionInput.businessCenter,\n    emailBodyHtml: emailBody.content || ''\n  },\n  binary: attachmentBinary\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5280,
+        -272
+      ],
+      "id": "b1000000-0000-4000-8000-000000000033",
+      "name": "Prepare Notification Input"
     },
     {
       "parameters": {},
@@ -407,17 +375,6 @@
       ],
       "id": "b1000000-0000-4000-8000-000000000030",
       "name": "Parse Failed"
-    },
-    {
-      "parameters": {},
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [
-        5552,
-        -48
-      ],
-      "id": "b1000000-0000-4000-8000-000000000031",
-      "name": "Rejected"
     },
     {
       "parameters": {
@@ -463,8 +420,8 @@
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        6512,
-        -176
+        5760,
+        -272
       ],
       "id": "b1000000-0000-4000-8000-000000000071",
       "name": "Move to Processed",
@@ -897,47 +854,7 @@
       "main": [
         [
           {
-            "node": "Prepare Approval Input",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Approval Input": {
-      "main": [
-        [
-          {
-            "node": "WF-05: Approval Gate",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "WF-05: Approval Gate": {
-      "main": [
-        [
-          {
-            "node": "Approved?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Approved?": {
-      "main": [
-        [
-          {
             "node": "Prepare Submission Input",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Rejected",
             "type": "main",
             "index": 0
           }
@@ -956,6 +873,28 @@
       ]
     },
     "WF-06: Submit Order": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notification Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Notification Input": {
+      "main": [
+        [
+          {
+            "node": "WF-05: Send Order Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-05: Send Order Notification": {
       "main": [
         [
           {
@@ -982,17 +921,6 @@
         [
           {
             "node": "Move to Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Rejected": {
-      "main": [
-        [
-          {
-            "node": "Move to Processed",
             "type": "main",
             "index": 0
           }

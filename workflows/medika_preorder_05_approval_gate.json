@@ -1,5 +1,5 @@
 {
-  "name": "[medika-preorders] WF-05: Approval Gate",
+  "name": "[medika-preorders] WF-05: Send Order Notification",
   "active": false,
   "nodes": [
     {
@@ -17,7 +17,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build HTML summary for approval email\nconst input = $input.first().json;\nconst lines = input.validatedLines || [];\nconst summary = input.summary || { valid: 0, invalid: 0, warnings: 0 };\nconst senderEmail = input.senderEmail || 'unknown';\nconst emailSubject = input.emailSubject || 'N/A';\n\nlet html = `<h2>Pre-Order Approval Required</h2>`;\nhtml += `<p><strong>From:</strong> ${senderEmail}<br>`;\nhtml += `<strong>Subject:</strong> ${emailSubject}<br>`;\nhtml += `<strong>Lines:</strong> ${lines.length} | `;\nhtml += `<strong>Valid:</strong> ${summary.valid} | `;\nhtml += `<strong>Invalid:</strong> ${summary.invalid} | `;\nhtml += `<strong>With Warnings:</strong> ${summary.warnings}</p>`;\n\nhtml += `<table border=\"1\" cellpadding=\"5\" cellspacing=\"0\" style=\"border-collapse:collapse;font-size:13px;\">`;\nhtml += `<tr style=\"background:#f0f0f0;\"><th>#</th><th>Pharmacy ID</th><th>Pharmacy</th><th>Customer ID</th><th>Article ID</th><th>Article Name</th><th>Qty</th><th>Unit</th></tr>`;\n\nfor (let i = 0; i < lines.length; i++) {\n  const line = lines[i];\n  const bgColor = !line.valid ? '#ffe0e0' :\n                  line.warnings && line.warnings.length > 0 ? '#fff3cd' :\n                  line.parseMethod === 'AI_EXTRACTED' ? '#e0e7ff' : '#e0ffe0';\n\n  html += `<tr style=\"background:${bgColor};\">`;\n  html += `<td>${i + 1}</td>`;\n  html += `<td>${line.pharmacyId || line.deliveryPlace || '-'}</td>`;\n  html += `<td>${line.pharmacyName || line.deliveryPlaceName || '-'}</td>`;\n  html += `<td>${line.customer || '-'}</td>`;\n  html += `<td>${line.articleId || line.drugCode || '-'}</td>`;\n  html += `<td>${line.articleName || '-'}</td>`;\n  html += `<td>${line.quantity}</td>`;\n  html += `<td>${line.unit || 'kom'}</td>`;\n  html += `</tr>`;\n}\nhtml += `</table>`;\n\nif (summary.invalid > 0) {\n  html += `<p style=\"color:red;\"><strong>Warning:</strong> ${summary.invalid} line(s) have validation errors and will be skipped.</p>`;\n}\n\nconst aiLines = lines.filter(l => l.parseMethod === 'AI_EXTRACTED');\nif (aiLines.length > 0) {\n  html += `<p style=\"color:#3b5998;\"><strong>Note:</strong> ${aiLines.length} line(s) were extracted by AI and should be reviewed carefully (highlighted in blue).</p>`;\n}\n\nreturn [{\n  json: {\n    ...input,\n    approvalHtml: html\n  }\n}];\n"
+        "jsCode": "// Build HTML notification for order submission results\nconst input = $input.first().json;\nconst lines = input.validatedLines || [];\nconst invalidLines = input.invalidLines || [];\nconst summary = input.summary || { valid: 0, invalid: 0, warnings: 0 };\nconst senderEmail = input.senderEmail || 'unknown';\nconst emailSubject = input.emailSubject || 'N/A';\nconst submissionResult = input.submissionResult || {};\n\n// Submission results banner\nconst success = submissionResult.submitted || false;\nconst bannerColor = success ? '#d4edda' : '#f8d7da';\nconst bannerTextColor = success ? '#155724' : '#721c24';\nconst statusText = success ? 'ORDER SUBMITTED SUCCESSFULLY' : 'ORDER SUBMISSION FAILED';\n\nlet html = `<div style=\"padding:12px 16px;background:${bannerColor};color:${bannerTextColor};border-radius:6px;margin-bottom:16px;font-weight:bold;\">`;\nhtml += statusText;\nif (submissionResult.orders && submissionResult.orders.length > 0) {\n  html += `<br>Order IDs: ${submissionResult.orders.map(o => o.orderId).join(', ')}`;\n}\nif (submissionResult.errors && submissionResult.errors.length > 0) {\n  html += `<br>Errors: ${submissionResult.errors.map(e => e.error).join('; ')}`;\n}\nhtml += `</div>`;\n\nhtml += `<h2>Pre-Order Notification</h2>`;\nhtml += `<p><strong>From:</strong> ${senderEmail}<br>`;\nhtml += `<strong>Subject:</strong> ${emailSubject}<br>`;\nhtml += `<strong>Lines:</strong> ${lines.length} | `;\nhtml += `<strong>Valid:</strong> ${summary.valid} | `;\nhtml += `<strong>Invalid:</strong> ${summary.invalid} | `;\nhtml += `<strong>With Warnings:</strong> ${summary.warnings}</p>`;\n\nhtml += `<table border=\"1\" cellpadding=\"5\" cellspacing=\"0\" style=\"border-collapse:collapse;font-size:13px;\">`;\nhtml += `<tr style=\"background:#f0f0f0;\"><th>#</th><th>Pharmacy ID</th><th>Pharmacy</th><th>Customer ID</th><th>Article ID</th><th>Article Name</th><th>Qty</th><th>Unit</th></tr>`;\n\nconst allLines = [...lines, ...invalidLines];\nfor (let i = 0; i < allLines.length; i++) {\n  const line = allLines[i];\n  const bgColor = !line.valid ? '#ffe0e0' :\n                  line.warnings && line.warnings.length > 0 ? '#fff3cd' :\n                  line.parseMethod === 'AI_EXTRACTED' ? '#e0e7ff' : '#e0ffe0';\n\n  html += `<tr style=\"background:${bgColor};\">`;\n  html += `<td>${i + 1}</td>`;\n  html += `<td>${line.pharmacyId || line.deliveryPlace || '-'}</td>`;\n  html += `<td>${line.pharmacyName || line.deliveryPlaceName || '-'}</td>`;\n  html += `<td>${line.customer || '-'}</td>`;\n  html += `<td>${line.articleId || line.drugCode || '-'}</td>`;\n  html += `<td>${line.articleName || '-'}</td>`;\n  html += `<td>${line.quantity}</td>`;\n  html += `<td>${line.unit || 'kom'}</td>`;\n  html += `</tr>`;\n}\nhtml += `</table>`;\n\nif (summary.invalid > 0) {\n  html += `<p style=\"color:red;\"><strong>Warning:</strong> ${summary.invalid} line(s) have validation errors and were skipped.</p>`;\n}\n\nconst aiLines = allLines.filter(l => l.parseMethod === 'AI_EXTRACTED');\nif (aiLines.length > 0) {\n  html += `<p style=\"color:#3b5998;\"><strong>Note:</strong> ${aiLines.length} line(s) were extracted by AI (highlighted in blue).</p>`;\n}\n\n// Original email body\nconst emailBodyHtml = input.emailBodyHtml || '';\nif (emailBodyHtml) {\n  html += `<hr style=\"margin:20px 0;\">`;\n  html += `<h3>Original Email</h3>`;\n  html += `<blockquote style=\"border-left:3px solid #ccc;padding:8px 16px;margin:8px 0;color:#555;\">${emailBodyHtml}</blockquote>`;\n}\n\nconst binary = $input.first().binary || {};\n\nreturn [{\n  json: {\n    ...input,\n    notificationHtml: html\n  },\n  binary: binary\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -26,15 +26,22 @@
         0
       ],
       "id": "f5000000-0000-4000-8000-000000000002",
-      "name": "Build Approval Summary"
+      "name": "Build Order Notification"
     },
     {
       "parameters": {
-        "toRecipients": "vlatko.goljevacki@gmail.com",
-        "subject": "=Pre-Order Approval: {{ $json.senderEmail }} ({{ $json.lineCount }} lines) — {{ $json.receivedAt ? new Date($json.receivedAt).toLocaleDateString('hr-HR') : '' }}",
-        "bodyContent": "={{ $json.approvalHtml + '<br><p><a href=\"' + $execution.resumeFormUrl + '\" style=\"display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;\">Review &amp; Approve</a></p>' }}",
+        "toRecipients": "={{ $json.config.notifyEmail }}",
+        "subject": "=Pre-Order Notification: {{ $json.senderEmail }} ({{ $json.lineCount }} lines) — {{ $json.receivedAt ? new Date($json.receivedAt).toLocaleDateString('hr-HR') : '' }}",
+        "bodyContent": "={{ $json.notificationHtml }}",
         "additionalFields": {
-          "bodyContentType": "html"
+          "bodyContentType": "html",
+          "attachments": {
+            "attachments": [
+              {
+                "binaryPropertyName": "data"
+              }
+            ]
+          }
         }
       },
       "type": "n8n-nodes-base.microsoftOutlook",
@@ -44,7 +51,7 @@
         0
       ],
       "id": "f5000000-0000-4000-8000-000000000003",
-      "name": "Send Approval Email",
+      "name": "Send Order Notification Email",
       "webhookId": "05bbe895-40bc-4728-9962-34a8c43fab61",
       "credentials": {
         "microsoftOutlookOAuth2Api": {
@@ -52,63 +59,6 @@
           "name": "Microsoft Outlook account"
         }
       }
-    },
-    {
-      "parameters": {
-        "resume": "form",
-        "formTitle": "Pre-Order Approval",
-        "formDescription": "Review the order details sent via email and make a decision.",
-        "formFields": {
-          "values": [
-            {
-              "fieldLabel": "Decision",
-              "fieldType": "dropdown",
-              "fieldOptions": {
-                "values": [
-                  {
-                    "option": "Approve"
-                  },
-                  {
-                    "option": "Reject"
-                  }
-                ]
-              },
-              "requiredField": true
-            },
-            {
-              "fieldLabel": "Comments",
-              "fieldType": "textarea"
-            }
-          ]
-        },
-        "limitWaitTime": true,
-        "limitType": "afterTimeInterval",
-        "resumeAmount": 24,
-        "resumeUnit": "hours",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.wait",
-      "typeVersion": 1.1,
-      "position": [
-        720,
-        0
-      ],
-      "id": "f5000000-0000-4000-8000-000000000004",
-      "name": "Wait for Approval",
-      "webhookId": "e62f2841-4048-47c3-8671-f91fd717b2c2"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Combine the approval decision with the original order data\nconst formData = $input.first().json;\n\n// If Wait node timed out, formData won't have Decision field\nconst isTimeout = !formData.Decision && !formData.decision;\nconst decision = isTimeout ? 'Timeout' : (formData.Decision || formData.decision || '').trim();\nconst comments = isTimeout ? 'Auto-rejected: approval timeout (24h)' : (formData.Comments || formData.comments || '');\n\n// Get order data from the Build Approval Summary node\nconst orderData = $('Build Approval Summary').first().json;\n\nreturn [{\n  json: {\n    decision: decision,\n    comments: comments,\n    approved: decision === 'Approve',\n    rejected: decision === 'Reject' || isTimeout,\n    timedOut: isTimeout,\n    decidedAt: new Date().toISOString(),\n    config: orderData.config,\n    validatedLines: orderData.validatedLines,\n    summary: orderData.summary,\n    senderEmail: orderData.senderEmail,\n    emailSubject: orderData.emailSubject,\n    emailId: orderData.emailId,\n    receivedAt: orderData.receivedAt,\n    customer: orderData.customer,\n    deliveryPlace: orderData.deliveryPlace,\n    businessCenter: orderData.businessCenter,\n    lineCount: orderData.lineCount\n  }\n}];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        960,
-        0
-      ],
-      "id": "f5000000-0000-4000-8000-000000000005",
-      "name": "Process Decision"
     }
   ],
   "connections": {
@@ -116,40 +66,18 @@
       "main": [
         [
           {
-            "node": "Build Approval Summary",
+            "node": "Build Order Notification",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Build Approval Summary": {
+    "Build Order Notification": {
       "main": [
         [
           {
-            "node": "Send Approval Email",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Send Approval Email": {
-      "main": [
-        [
-          {
-            "node": "Wait for Approval",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Wait for Approval": {
-      "main": [
-        [
-          {
-            "node": "Process Decision",
+            "node": "Send Order Notification Email",
             "type": "main",
             "index": 0
           }
