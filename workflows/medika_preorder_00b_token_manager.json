@@ -1,0 +1,360 @@
+{
+  "name": "[medika-preorders] WF-00b: ERP Token Manager",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f0b00000-0000-4000-8000-000000000001",
+      "name": "Sub-Workflow Input"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f0b-cfg-001",
+              "name": "erpApiUrl",
+              "value": "={{ $env.MEDIKA_ERP_URL }}",
+              "type": "string"
+            },
+            {
+              "id": "f0b-cfg-002",
+              "name": "erpUsername",
+              "value": "={{ $env.MEDIKA_ERP_USERNAME }}",
+              "type": "string"
+            },
+            {
+              "id": "f0b-cfg-003",
+              "name": "erpPassword",
+              "value": "={{ $env.MEDIKA_ERP_PASSWORD }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        -200
+      ],
+      "id": "f0b00000-0000-4000-8000-000000000010",
+      "name": "Config"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "LDdPdfhyudDcNRRp",
+          "mode": "list",
+          "cachedResultName": "ERP Tokens",
+          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/LDdPdfhyudDcNRRp"
+        },
+        "limit": 10
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        0
+      ],
+      "id": "f0b00000-0000-4000-8000-000000000002",
+      "name": "DT: Read Token",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Check Data Table for a valid cached ERP token\nconst config = $('Config').first().json;\nconst erpApiUrl = config.erpApiUrl;\nconst erpUsername = config.erpUsername;\nconst erpPassword = config.erpPassword;\n\n// Find latest valid token from DT results\nconst dtRows = $('DT: Read Token').all();\nlet latestToken = null;\nlet latestStoredAt = 0;\n\nfor (const row of dtRows) {\n  const r = row.json;\n  if (!r.token || !r.expiresAt) continue;\n\n  const storedAt = r.storedAt ? new Date(r.storedAt).getTime() : 0;\n  if (storedAt > latestStoredAt) {\n    latestStoredAt = storedAt;\n    latestToken = r;\n  }\n}\n\n// Check if latest token is still valid (5-min buffer)\nif (latestToken) {\n  const bufferMs = 5 * 60 * 1000;\n  const expiresAt = new Date(latestToken.expiresAt).getTime();\n  if (Date.now() < (expiresAt - bufferMs)) {\n    return [{ json: {\n      needsFetch: false,\n      accessToken: latestToken.token,\n      expiresAt: latestToken.expiresAt\n    }}];\n  }\n}\n\n// Token missing or expired — prepare fetch\nreturn [{ json: {\n  needsFetch: true,\n  tokenUrl: erpApiUrl + '/Token',\n  tokenBody: 'grant_type=password&username=' + encodeURIComponent(erpUsername) + '&password=' + encodeURIComponent(erpPassword)\n}}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "id": "f0b00000-0000-4000-8000-000000000003",
+      "name": "Check Token"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "f0b00003-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.needsFetch }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "id": "f0b00000-0000-4000-8000-000000000004",
+      "name": "Token Valid?"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Return cached token from Data Table\nconst checked = $input.first().json;\n\nreturn [{ json: {\n  accessToken: checked.accessToken,\n  expiresAt: checked.expiresAt,\n  cacheHit: true\n}}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        -96
+      ],
+      "id": "f0b00000-0000-4000-8000-000000000005",
+      "name": "Return Cached Token"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.tokenUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "={{ $json.tokenBody }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        208
+      ],
+      "id": "f0b00000-0000-4000-8000-000000000006",
+      "name": "Fetch Token"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Parse ERP token response and format for Data Table storage\nconst tokenResponse = $input.first().json;\nconst token = tokenResponse.access_token;\nif (!token) {\n  throw new Error('Failed to get ERP token: ' + JSON.stringify(tokenResponse));\n}\n\nlet expiresAt;\nif (tokenResponse['.expires']) {\n  expiresAt = new Date(tokenResponse['.expires']).toISOString();\n} else if (tokenResponse.expires_in) {\n  expiresAt = new Date(Date.now() + (tokenResponse.expires_in * 1000)).toISOString();\n} else {\n  expiresAt = new Date(Date.now() + (60 * 60 * 1000)).toISOString();\n}\n\nreturn [{ json: {\n  token: token,\n  expiresAt: expiresAt,\n  storedAt: new Date().toISOString(),\n  accessToken: token\n}}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        208
+      ],
+      "id": "f0b00000-0000-4000-8000-000000000007",
+      "name": "Parse Token"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "LDdPdfhyudDcNRRp",
+          "mode": "list",
+          "cachedResultName": "ERP Tokens",
+          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/LDdPdfhyudDcNRRp"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "token": "={{ $json.token }}",
+            "expiresAt": "={{ $json.expiresAt }}",
+            "storedAt": "={{ $json.storedAt }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "token",
+              "displayName": "token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "expiresAt",
+              "displayName": "expiresAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "storedAt",
+              "displayName": "storedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        208
+      ],
+      "id": "f0b00000-0000-4000-8000-000000000008",
+      "name": "DT: Save Token"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Return fresh token after saving to Data Table\nconst parsed = $('Parse Token').first().json;\n\nreturn [{ json: {\n  accessToken: parsed.accessToken,\n  expiresAt: parsed.expiresAt,\n  cacheHit: false\n}}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        208
+      ],
+      "id": "f0b00000-0000-4000-8000-000000000009",
+      "name": "Return Fresh Token"
+    }
+  ],
+  "connections": {
+    "Sub-Workflow Input": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "DT: Read Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DT: Read Token": {
+      "main": [
+        [
+          {
+            "node": "Check Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Token": {
+      "main": [
+        [
+          {
+            "node": "Token Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token Valid?": {
+      "main": [
+        [
+          {
+            "node": "Return Cached Token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Token": {
+      "main": [
+        [
+          {
+            "node": "Parse Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Token": {
+      "main": [
+        [
+          {
+            "node": "DT: Save Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DT: Save Token": {
+      "main": [
+        [
+          {
+            "node": "Return Fresh Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": []
+}

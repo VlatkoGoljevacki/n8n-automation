@@ -16,8 +16,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        80,
-        16
+        1280,
+        -16
       ],
       "id": "b1000000-0000-4000-8000-000000000090",
       "name": "Poll Every Minute"
@@ -26,24 +26,6 @@
       "parameters": {
         "assignments": {
           "assignments": [
-            {
-              "id": "cfg-001",
-              "name": "erpApiUrl",
-              "value": "={{ $env.MEDIKA_ERP_URL }}",
-              "type": "string"
-            },
-            {
-              "id": "cfg-002",
-              "name": "erpUsername",
-              "value": "={{ $env.MEDIKA_ERP_USERNAME }}",
-              "type": "string"
-            },
-            {
-              "id": "cfg-003",
-              "name": "erpPassword",
-              "value": "={{ $env.MEDIKA_ERP_PASSWORD }}",
-              "type": "string"
-            },
             {
               "id": "cfg-004",
               "name": "businessCenterDefault",
@@ -99,111 +81,30 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1104,
-        16
+        2096,
+        -16
       ],
       "id": "b1000000-0000-4000-8000-000000000040",
       "name": "Config"
     },
     {
       "parameters": {
-        "jsCode": "// Check static data for a valid (non-expired) ERP token\nconst staticData = $getWorkflowStaticData('global');\n\nif (staticData.erpToken && staticData.erpTokenExpiresAt) {\n  const bufferMs = 5 * 60 * 1000;\n  if (Date.now() < (staticData.erpTokenExpiresAt - bufferMs)) {\n    return [{ json: { erpToken: staticData.erpToken, tokenCacheHit: true }, binary: $input.first().binary }];\n  }\n}\n\nreturn [{ json: { erpToken: null, tokenCacheHit: false }, binary: $input.first().binary }];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1344,
-        16
-      ],
-      "id": "b1000000-0000-4000-8000-000000000060",
-      "name": "Check ERP Token"
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "d1000060-0000-4000-8000-000000000001",
-              "leftValue": "={{ $json.tokenCacheHit }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "true"
-              }
-            }
-          ],
-          "combinator": "and"
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "LWeqg7YdOmpQWQP6"
         },
         "options": {}
       },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
       "position": [
-        1584,
-        16
+        2336,
+        -16
       ],
-      "id": "b1000000-0000-4000-8000-000000000061",
-      "name": "Token Valid?"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Build OAuth2 token request\nconst config = $('Config').first().json;\n\nreturn [{\n  json: {\n    tokenUrl: config.erpApiUrl + '/Token',\n    tokenBody: 'grant_type=password&username=' + encodeURIComponent(config.erpUsername) + '&password=' + encodeURIComponent(config.erpPassword)\n  },\n  binary: $input.first().binary\n}];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1824,
-        224
-      ],
-      "id": "b1000000-0000-4000-8000-000000000062",
-      "name": "Prepare Auth"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $json.tokenUrl }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/x-www-form-urlencoded"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "string",
-        "body": "={{ $json.tokenBody }}",
-        "options": {
-          "timeout": 15000
-        }
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2064,
-        224
-      ],
-      "id": "b1000000-0000-4000-8000-000000000063",
-      "name": "Fetch ERP Token"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Store ERP token in static data with expiry\nconst staticData = $getWorkflowStaticData('global');\nconst tokenResponse = $input.first().json;\n\nconst token = tokenResponse.access_token;\nif (!token) {\n  throw new Error('Failed to get ERP token: ' + JSON.stringify(tokenResponse));\n}\n\nlet expiresAt;\nif (tokenResponse['.expires']) {\n  expiresAt = new Date(tokenResponse['.expires']).getTime();\n} else if (tokenResponse.expires_in) {\n  expiresAt = Date.now() + (tokenResponse.expires_in * 1000);\n} else {\n  expiresAt = Date.now() + (60 * 60 * 1000);\n}\n\nstaticData.erpToken = token;\nstaticData.erpTokenExpiresAt = expiresAt;\n\nreturn [{ json: { erpToken: token, tokenCacheHit: false }, binary: $('Check ERP Token').first().binary }];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2304,
-        224
-      ],
-      "id": "b1000000-0000-4000-8000-000000000064",
-      "name": "Store ERP Token"
+      "id": "b1000000-0000-4000-8000-000000000095",
+      "name": "WF-00b: Get Token",
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -410,7 +311,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Prepare input for data validation with customer lookup from DataTable\nconst lookupResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json;\nconst erpToken = $('Check ERP Token').first().json.erpToken\n  || ($('Store ERP Token').first().json || {}).erpToken;\n\nreturn [{\n  json: {\n    config: config,\n    orderLines: lookupResult.orderLines || [],\n    lineCount: lookupResult.lineCount || 0,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    customer: parserInput.customer,\n    deliveryPlace: parserInput.deliveryPlace,\n    defaultDiscountPerc: parserInput.defaultDiscountPerc,\n    customerLookup: lookupResult.customerLookup\n  }\n}];"
+        "jsCode": "// Prepare input for data validation with customer lookup from DataTable\nconst lookupResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json;\n\nreturn [{\n  json: {\n    config: config,\n    orderLines: lookupResult.orderLines || [],\n    lineCount: lookupResult.lineCount || 0,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    customer: parserInput.customer,\n    deliveryPlace: parserInput.deliveryPlace,\n    defaultDiscountPerc: parserInput.defaultDiscountPerc,\n    customerLookup: lookupResult.customerLookup\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -506,12 +407,12 @@
     },
     {
       "parameters": {
-        "jsCode": "// Pass approval result to WF-06 (token is handled by WF-06 itself now)\nconst approvalResult = $input.first().json;\nconst config = approvalResult.config || $('Config').first().json;\n\nreturn [{\n  json: {\n    ...approvalResult,\n    config: config\n  }\n}];"
+        "jsCode": "// Pass approval result to WF-06 (WF-06 fetches its own token via WF-00b)\nconst approvalResult = $input.first().json;\nconst config = approvalResult.config || $('Config').first().json;\n\nreturn [{\n  json: {\n    ...approvalResult,\n    config: config\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        5520,
+        5808,
         -368
       ],
       "id": "b1000000-0000-4000-8000-000000000032",
@@ -529,7 +430,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        5760,
+        6032,
         -368
       ],
       "id": "b1000000-0000-4000-8000-000000000028",
@@ -564,7 +465,7 @@
       "typeVersion": 1,
       "position": [
         4320,
-        -64
+        -80
       ],
       "id": "b1000000-0000-4000-8000-000000000030",
       "name": "Parse Failed"
@@ -574,8 +475,8 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        5520,
-        -176
+        5552,
+        -48
       ],
       "id": "b1000000-0000-4000-8000-000000000031",
       "name": "Rejected"
@@ -595,8 +496,8 @@
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        848,
-        16
+        1840,
+        -16
       ],
       "id": "b1000000-0000-4000-8000-000000000070",
       "name": "Mark as Read",
@@ -624,7 +525,7 @@
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        6000,
+        6512,
         -176
       ],
       "id": "b1000000-0000-4000-8000-000000000071",
@@ -680,7 +581,7 @@
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        5760,
+        6512,
         144
       ],
       "id": "b1000000-0000-4000-8000-000000000072",
@@ -716,8 +617,8 @@
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        320,
-        16
+        1520,
+        -16
       ],
       "id": "7ccc76d3-062a-427c-b7aa-6fc833ab27c2",
       "name": "New Email Received",
@@ -731,7 +632,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Output one item per unique delivery place ID for individual DT lookups\nconst parseResult = $input.first().json;\nconst orderLines = parseResult.orderLines || [];\n\n// Get erpToken from whichever path was taken\nlet erpToken;\ntry { erpToken = $(\"Check ERP Token\").first().json.erpToken; } catch(e) {}\nif (!erpToken) {\n  try { erpToken = $(\"Store ERP Token\").first().json.erpToken; } catch(e) {}\n}\n\nconst ids = [...new Set(orderLines.map(l => l.pharmacyId).filter(Boolean))];\n\n// Output one item per delivery place ID\nreturn ids.map(id => ({ json: { deliveryPlaceId: id, erpToken, parseResult } }));"
+        "jsCode": "// Output one item per unique delivery place ID for individual DT lookups\nconst parseResult = $input.first().json;\nconst orderLines = parseResult.orderLines || [];\nconst accessToken = $('WF-00b: Get Token').first().json.accessToken;\n\nconst ids = [...new Set(orderLines.map(l => l.pharmacyId).filter(Boolean))];\n\n// Output one item per delivery place ID\nreturn ids.map(id => ({ json: { deliveryPlaceId: id, accessToken, parseResult } }));"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -775,7 +676,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Aggregate per-ID DT lookup results into a single customer lookup\nconst firstItem = $('Extract Order Delivery IDs').first().json;\nconst parseResult = firstItem.parseResult;\nconst erpToken = firstItem.erpToken;\n\n// Collect all requested delivery place IDs\nconst requestedItems = $('Extract Order Delivery IDs').all();\nconst requestedIds = requestedItems.map(i => i.json.deliveryPlaceId);\n\n// Build lookup from DT results (one result per requested ID)\nconst dtRows = $('DT: Lookup Delivery Places').all();\nconst deliveryPlaceById = {};\nconst customerById = {};\n\nfor (const row of dtRows) {\n  const r = row.json;\n  if (r.deliveryPlaceId) {\n    deliveryPlaceById[r.deliveryPlaceId] = {\n      customerId: r.customerId,\n      customerName: r.customerName,\n      name: r.name,\n      city: r.city,\n      postCode: r.postCode,\n      street: r.street\n    };\n    if (r.customerId && !customerById[r.customerId]) {\n      customerById[r.customerId] = {\n        name: r.customerName,\n        oib: r.oib,\n        city: r.city,\n        postCode: r.postCode,\n        street: r.street\n      };\n    }\n  }\n}\n\nconst missingIds = requestedIds.filter(id => !deliveryPlaceById[id]);\n\nreturn [{\n  json: {\n    ...parseResult,\n    erpToken,\n    customerLookup: {\n      customerById,\n      deliveryPlaceById,\n      totalCustomers: Object.keys(customerById).length,\n      totalDeliveryPlaces: Object.keys(deliveryPlaceById).length,\n      source: 'datatable'\n    },\n    missingDeliveryPlaceIds: missingIds,\n    hasMissing: missingIds.length > 0\n  }\n}];"
+        "jsCode": "// Aggregate per-ID DT lookup results into a single customer lookup\nconst firstItem = $('Extract Order Delivery IDs').first().json;\nconst parseResult = firstItem.parseResult;\nconst accessToken = firstItem.accessToken;\n\n// Collect all requested delivery place IDs\nconst requestedItems = $('Extract Order Delivery IDs').all();\nconst requestedIds = requestedItems.map(i => i.json.deliveryPlaceId);\n\n// Build lookup from DT results (one result per requested ID)\nconst dtRows = $('DT: Lookup Delivery Places').all();\nconst deliveryPlaceById = {};\nconst customerById = {};\n\nfor (const row of dtRows) {\n  const r = row.json;\n  if (r.deliveryPlaceId) {\n    deliveryPlaceById[r.deliveryPlaceId] = {\n      customerId: r.customerId,\n      customerName: r.customerName,\n      name: r.name,\n      city: r.city,\n      postCode: r.postCode,\n      street: r.street\n    };\n    if (r.customerId && !customerById[r.customerId]) {\n      customerById[r.customerId] = {\n        name: r.customerName,\n        oib: r.oib,\n        city: r.city,\n        postCode: r.postCode,\n        street: r.street\n      };\n    }\n  }\n}\n\nconst missingIds = requestedIds.filter(id => !deliveryPlaceById[id]);\n\nreturn [{\n  json: {\n    ...parseResult,\n    accessToken,\n    customerLookup: {\n      customerById,\n      deliveryPlaceById,\n      totalCustomers: Object.keys(customerById).length,\n      totalDeliveryPlaces: Object.keys(deliveryPlaceById).length,\n      source: 'datatable'\n    },\n    missingDeliveryPlaceIds: missingIds,\n    hasMissing: missingIds.length > 0\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -838,8 +739,8 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        5248,
-        -608
+        5232,
+        -624
       ],
       "id": "b1000000-0000-4000-8000-000000000084",
       "name": "WF-07: Refresh Customers",
@@ -869,8 +770,8 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        5472,
-        -608
+        5680,
+        -624
       ],
       "id": "b1000000-0000-4000-8000-000000000085",
       "name": "Re-lookup Delivery Places",
@@ -883,21 +784,21 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        5360,
-        -608
+        5456,
+        -624
       ],
       "id": "b1000000-0000-4000-8000-000000000087",
       "name": "Restore Order IDs"
     },
     {
       "parameters": {
-        "jsCode": "// Rebuild lookup after WF-07 refresh\nconst firstItem = $('Extract Order Delivery IDs').first().json;\nconst parseResult = firstItem.parseResult;\nconst erpToken = firstItem.erpToken;\n\nconst requestedItems = $('Extract Order Delivery IDs').all();\nconst requestedIds = requestedItems.map(i => i.json.deliveryPlaceId);\n\nconst dtRows = $('Re-lookup Delivery Places').all();\nconst deliveryPlaceById = {};\nconst customerById = {};\n\nfor (const row of dtRows) {\n  const r = row.json;\n  if (r.deliveryPlaceId) {\n    deliveryPlaceById[r.deliveryPlaceId] = {\n      customerId: r.customerId,\n      customerName: r.customerName,\n      name: r.name,\n      city: r.city,\n      postCode: r.postCode,\n      street: r.street\n    };\n    if (r.customerId && !customerById[r.customerId]) {\n      customerById[r.customerId] = {\n        name: r.customerName,\n        oib: r.oib,\n        city: r.city,\n        postCode: r.postCode,\n        street: r.street\n      };\n    }\n  }\n}\n\nconst missingIds = requestedIds.filter(id => !deliveryPlaceById[id]);\nif (missingIds.length > 0) {\n  console.log('Still missing after refresh: ' + missingIds.join(', '));\n}\n\nreturn [{\n  json: {\n    ...parseResult,\n    erpToken,\n    customerLookup: {\n      customerById,\n      deliveryPlaceById,\n      totalCustomers: Object.keys(customerById).length,\n      totalDeliveryPlaces: Object.keys(deliveryPlaceById).length,\n      source: 'datatable_refreshed'\n    },\n    missingDeliveryPlaceIds: missingIds,\n    hasMissing: missingIds.length > 0\n  }\n}];"
+        "jsCode": "// Rebuild lookup after WF-07 refresh\nconst firstItem = $('Extract Order Delivery IDs').first().json;\nconst parseResult = firstItem.parseResult;\nconst accessToken = firstItem.accessToken;\n\nconst requestedItems = $('Extract Order Delivery IDs').all();\nconst requestedIds = requestedItems.map(i => i.json.deliveryPlaceId);\n\nconst dtRows = $('Re-lookup Delivery Places').all();\nconst deliveryPlaceById = {};\nconst customerById = {};\n\nfor (const row of dtRows) {\n  const r = row.json;\n  if (r.deliveryPlaceId) {\n    deliveryPlaceById[r.deliveryPlaceId] = {\n      customerId: r.customerId,\n      customerName: r.customerName,\n      name: r.name,\n      city: r.city,\n      postCode: r.postCode,\n      street: r.street\n    };\n    if (r.customerId && !customerById[r.customerId]) {\n      customerById[r.customerId] = {\n        name: r.customerName,\n        oib: r.oib,\n        city: r.city,\n        postCode: r.postCode,\n        street: r.street\n      };\n    }\n  }\n}\n\nconst missingIds = requestedIds.filter(id => !deliveryPlaceById[id]);\nif (missingIds.length > 0) {\n  console.log('Still missing after refresh: ' + missingIds.join(', '));\n}\n\nreturn [{\n  json: {\n    ...parseResult,\n    accessToken,\n    customerLookup: {\n      customerById,\n      deliveryPlaceById,\n      totalCustomers: Object.keys(customerById).length,\n      totalDeliveryPlaces: Object.keys(deliveryPlaceById).length,\n      source: 'datatable_refreshed'\n    },\n    missingDeliveryPlaceIds: missingIds,\n    hasMissing: missingIds.length > 0\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        5664,
-        -608
+        6048,
+        -624
       ],
       "id": "b1000000-0000-4000-8000-000000000086",
       "name": "Rebuild Customer Lookup"
@@ -928,8 +829,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        5904,
-        -608
+        6272,
+        -624
       ],
       "id": "b1000000-0000-4000-8000-000000000088",
       "name": "All Found After Refresh?"
@@ -939,8 +840,8 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        6144,
-        -496
+        6512,
+        -608
       ],
       "id": "b1000000-0000-4000-8000-000000000089",
       "name": "Customer Lookup Failed"
@@ -984,65 +885,14 @@
       "main": [
         [
           {
-            "node": "Check ERP Token",
+            "node": "WF-00b: Get Token",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Check ERP Token": {
-      "main": [
-        [
-          {
-            "node": "Token Valid?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Token Valid?": {
-      "main": [
-        [
-          {
-            "node": "Extract Email Metadata",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Prepare Auth",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Auth": {
-      "main": [
-        [
-          {
-            "node": "Fetch ERP Token",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Fetch ERP Token": {
-      "main": [
-        [
-          {
-            "node": "Store ERP Token",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Store ERP Token": {
+    "WF-00b: Get Token": {
       "main": [
         [
           {

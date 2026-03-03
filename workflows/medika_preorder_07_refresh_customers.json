@@ -23,7 +23,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $json.erpToken }}"
+              "value": "=Bearer {{ $json.accessToken }}"
             }
           ]
         },

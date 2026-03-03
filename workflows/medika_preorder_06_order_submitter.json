@@ -8,113 +8,72 @@
       },
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
-      "position": [0, 0],
+      "position": [
+        224,
+        -304
+      ],
       "id": "f6000000-0000-4000-8000-000000000001",
       "name": "Sub-Workflow Input"
     },
     {
       "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "// Build Medika SaveTransferOrder request payload\nconst input = $input.first().json;\nconst config = input.config || {};\nconst lines = input.validatedLines || [];\n\nconst submittableLines = lines.filter(l => l.articleId && l.valid !== false);\nconst skippedLines = lines.filter(l => !l.articleId || l.valid === false);\n\nconst orderPayload = {\n  BusinessCenter: input.businessCenter || config.businessCenterDefault || '10',\n  Customer: input.customer || '',\n  DeliveryPlace: input.deliveryPlace || '',\n  CustomerOrderNumber: 'MP-' + (input.emailId || '').substring(0, 8) + '-' + Date.now(),\n  CustomerOrderDate: (input.receivedAt || new Date().toISOString()).split('T')[0],\n  Text: input.emailSubject || 'Prednarudžba',\n  Items: submittableLines.map(line => ({\n    ArticleID: String(line.articleId),\n    ArticleDescCustomer: line.articleName || '',\n    Quantity: parseFloat(line.quantity) || 0,\n    DiscountPerc: parseFloat(line.discountPerc) || 0.0,\n    Message: line.notes || ''\n  }))\n};\n\nreturn [{\n  json: {\n    config: config,\n    accessToken: input.accessToken || null,\n    orderPayload: orderPayload,\n    submittedLineCount: submittableLines.length,\n    skippedLineCount: skippedLines.length,\n    skippedLines: skippedLines\n  }\n}];\n"
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f6-cfg-001",
+              "name": "erpApiUrl",
+              "value": "={{ $env.MEDIKA_ERP_URL }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        -304
+      ],
+      "id": "f6000000-0000-4000-8000-000000000025",
+      "name": "Config"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "LWeqg7YdOmpQWQP6"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        768,
+        -304
+      ],
+      "id": "f6000000-0000-4000-8000-000000000026",
+      "name": "WF-00b: Get Token",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build Medika SaveTransferOrder request payload\nconst input = $('Sub-Workflow Input').first().json;\nconst config = input.config || {};\nconst lines = input.validatedLines || [];\n\nconst submittableLines = lines.filter(l => l.articleId && l.valid !== false);\nconst skippedLines = lines.filter(l => !l.articleId || l.valid === false);\n\nconst orderPayload = {\n  BusinessCenter: input.businessCenter || config.businessCenterDefault || '10',\n  Customer: input.customer || '',\n  DeliveryPlace: input.deliveryPlace || '',\n  CustomerOrderNumber: 'MP-' + (input.emailId || '').substring(0, 8) + '-' + Date.now(),\n  CustomerOrderDate: (input.receivedAt || new Date().toISOString()).split('T')[0],\n  Text: input.emailSubject || 'Prednarudžba',\n  Items: submittableLines.map(line => ({\n    ArticleID: String(line.articleId),\n    ArticleDescCustomer: line.articleName || '',\n    Quantity: parseFloat(line.quantity) || 0,\n    DiscountPerc: parseFloat(line.discountPerc) || 0.0,\n    Message: line.notes || ''\n  }))\n};\n\nreturn [{\n  json: {\n    config: config,\n    accessToken: $('WF-00b: Get Token').first().json.accessToken,\n    orderPayload: orderPayload,\n    submittedLineCount: submittableLines.length,\n    skippedLineCount: skippedLines.length,\n    skippedLines: skippedLines\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [240, 0],
+      "position": [
+        1040,
+        -304
+      ],
       "id": "f6000000-0000-4000-8000-000000000002",
       "name": "Build API Payload"
     },
     {
       "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "// DRY RUN: Preview the exact HTTP request that would be sent to the API\nconst input = $input.first().json;\nconst config = input.config || {};\nconst apiUrl = (config.erpApiUrl || '') + '/api/SaveTransferOrder';\n\nreturn [{\n  json: {\n    _mode: 'DRY_RUN',\n    _note: 'This is a preview of the API request. No actual call was made.',\n    request: {\n      method: 'POST',\n      url: apiUrl,\n      headers: {\n        'Content-Type': 'application/json',\n        'Authorization': 'Bearer ' + (input.accessToken ? input.accessToken.substring(0, 20) + '...' : '(no token)')\n      },\n      body: input.orderPayload\n    },\n    summary: {\n      submittedLineCount: input.submittedLineCount,\n      skippedLineCount: input.skippedLineCount,\n      skippedLines: input.skippedLines,\n      customerOrderNumber: input.orderPayload.CustomerOrderNumber,\n      customer: input.orderPayload.Customer,\n      deliveryPlace: input.orderPayload.DeliveryPlace,\n      itemCount: (input.orderPayload.Items || []).length\n    },\n    submitted: true,\n    orderId: 'DRY-RUN-' + Date.now(),\n    submittedAt: new Date().toISOString()\n  }\n}];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1440, 0],
-      "id": "f6000000-0000-4000-8000-000000000020",
-      "name": "Preview API Request (DRY RUN)"
-    },
-    {
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "// Check for token: 1) from parent workflow input, 2) from own static data, 3) fetch fresh\nconst staticData = $getWorkflowStaticData('global');\nconst input = $input.first().json;\nconst config = input.config || {};\n\n// Priority 1: Token passed from orchestrator\nif (input.accessToken) {\n  return [{\n    json: {\n      ...input,\n      accessToken: input.accessToken,\n      tokenCacheHit: true\n    }\n  }];\n}\n\n// Priority 2: Own static data cache\nif (staticData.erpToken && staticData.erpTokenExpiresAt) {\n  const bufferMs = 5 * 60 * 1000;\n  if (Date.now() < (staticData.erpTokenExpiresAt - bufferMs)) {\n    return [{\n      json: {\n        ...input,\n        accessToken: staticData.erpToken,\n        tokenCacheHit: true\n      }\n    }];\n  }\n}\n\n// Priority 3: Need to fetch fresh token\nreturn [{\n  json: {\n    ...input,\n    accessToken: null,\n    tokenCacheHit: false,\n    tokenUrl: config.erpApiUrl + '/Token',\n    tokenBody: 'grant_type=password&username=' + encodeURIComponent(config.erpUsername || '') + '&password=' + encodeURIComponent(config.erpPassword || '')\n  }\n}];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [480, 0],
-      "id": "f6000000-0000-4000-8000-000000000015",
-      "name": "Check Token Cache"
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "d6000015-0000-4000-8000-000000000001",
-              "leftValue": "={{ $json.tokenCacheHit }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "true"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [720, 0],
-      "id": "f6000000-0000-4000-8000-000000000016",
-      "name": "Token Valid?"
-    },
-    {
-      "parameters": {
         "method": "POST",
-        "url": "={{ $json.tokenUrl }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/x-www-form-urlencoded"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "string",
-        "body": "={{ $json.tokenBody }}",
-        "options": {
-          "timeout": 15000
-        }
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [960, 200],
-      "id": "f6000000-0000-4000-8000-000000000011",
-      "name": "Fetch ERP Token"
-    },
-    {
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "// Store fresh token in static data and merge with build result\nconst staticData = $getWorkflowStaticData('global');\nconst tokenResponse = $input.first().json;\nconst buildResult = $('Build API Payload').first().json;\n\nconst token = tokenResponse.access_token;\nif (!token) {\n  throw new Error('Failed to get ERP token: ' + JSON.stringify(tokenResponse));\n}\n\nlet expiresAt;\nif (tokenResponse['.expires']) {\n  expiresAt = new Date(tokenResponse['.expires']).getTime();\n} else if (tokenResponse.expires_in) {\n  expiresAt = Date.now() + (tokenResponse.expires_in * 1000);\n} else {\n  expiresAt = Date.now() + (60 * 60 * 1000);\n}\n\nstaticData.erpToken = token;\nstaticData.erpTokenExpiresAt = expiresAt;\n\nreturn [{\n  json: {\n    ...buildResult,\n    accessToken: token,\n    tokenCacheHit: false\n  }\n}];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1200, 200],
-      "id": "f6000000-0000-4000-8000-000000000017",
-      "name": "Store Token"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $json.config.erpApiUrl }}/api/SaveTransferOrder",
+        "url": "={{ $('Config').first().json.erpApiUrl }}/api/SaveTransferOrder",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -137,24 +96,64 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1440, -300],
+      "position": [
+        1440,
+        -304
+      ],
       "id": "f6000000-0000-4000-8000-000000000003",
       "name": "Submit Order to API"
     },
     {
       "parameters": {
-        "mode": "runOnceForAllItems",
         "jsCode": "// Process Medika SaveTransferOrder response\nconst apiResponse = $input.first().json;\nconst buildResult = $('Build API Payload').first().json;\n\nreturn [{\n  json: {\n    submitted: true,\n    orderId: apiResponse.OrderID || null,\n    status: apiResponse.Status || null,\n    statusText: apiResponse.Status === 1 ? 'Received' : apiResponse.Status === 2 ? 'In process' : apiResponse.Status === 3 ? 'Processed' : 'Unknown',\n    customerOrderNumber: apiResponse.CustomerOrderNumber || buildResult.orderPayload.CustomerOrderNumber,\n    submittedLineCount: buildResult.submittedLineCount,\n    skippedLineCount: buildResult.skippedLineCount,\n    apiResponse: apiResponse,\n    submittedAt: new Date().toISOString()\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1680, -300],
+      "position": [
+        1936,
+        -304
+      ],
       "id": "f6000000-0000-4000-8000-000000000004",
       "name": "Process API Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// DRY RUN: Preview the exact HTTP request that would be sent to the API\nconst input = $input.first().json;\nconst config = input.config || {};\nconst apiUrl = ($('Config').first().json.erpApiUrl || '') + '/api/SaveTransferOrder';\n\nreturn [{\n  json: {\n    _mode: 'DRY_RUN',\n    _note: 'This is a preview of the API request. No actual call was made.',\n    request: {\n      method: 'POST',\n      url: apiUrl,\n      headers: {\n        'Content-Type': 'application/json',\n        'Authorization': 'Bearer ' + (input.accessToken ? input.accessToken.substring(0, 20) + '...' : '(no token)')\n      },\n      body: input.orderPayload\n    },\n    summary: {\n      submittedLineCount: input.submittedLineCount,\n      skippedLineCount: input.skippedLineCount,\n      skippedLines: input.skippedLines,\n      customerOrderNumber: input.orderPayload.CustomerOrderNumber,\n      customer: input.orderPayload.Customer,\n      deliveryPlace: input.orderPayload.DeliveryPlace,\n      itemCount: (input.orderPayload.Items || []).length\n    },\n    submitted: true,\n    orderId: 'DRY-RUN-' + Date.now(),\n    submittedAt: new Date().toISOString()\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        0
+      ],
+      "id": "f6000000-0000-4000-8000-000000000020",
+      "name": "Preview API Request (DRY RUN)"
     }
   ],
   "connections": {
     "Sub-Workflow Input": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "WF-00b: Get Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-00b: Get Token": {
       "main": [
         [
           {
@@ -169,58 +168,18 @@
       "main": [
         [
           {
-            "node": "Check Token Cache",
+            "node": "Submit Order to API",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Check Token Cache": {
+    "Submit Order to API": {
       "main": [
         [
           {
-            "node": "Token Valid?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Token Valid?": {
-      "main": [
-        [
-          {
-            "node": "Preview API Request (DRY RUN)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Fetch ERP Token",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Fetch ERP Token": {
-      "main": [
-        [
-          {
-            "node": "Store Token",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Store Token": {
-      "main": [
-        [
-          {
-            "node": "Preview API Request (DRY RUN)",
+            "node": "Process API Response",
             "type": "main",
             "index": 0
           }
