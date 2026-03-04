@@ -30,9 +30,12 @@ services:
       # Binary data on disk (not SQLite) — needed for XLSX attachments
       - N8N_DEFAULT_BINARY_DATA_MODE=filesystem
       # Execution history retention (1 year for audit)
-      - EXECUTIONS_DATA_MAX_AGE=8760
       - EXECUTIONS_DATA_PRUNE=true
-      - EXECUTIONS_DATA_PRUNE_MAX_COUNT=10000
+      - EXECUTIONS_DATA_MAX_AGE=8760
+      - EXECUTIONS_DATA_PRUNE_MAX_COUNT=0
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all
+      - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=true
       ### workflow vars
       - PLACES_API=${PLACES_API}
     deploy:
