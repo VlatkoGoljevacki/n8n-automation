@@ -1,0 +1,1050 @@
+{
+  "name": "[medika-preorders] WF-01b: Process Email",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "process-email",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        2120,
+        -16
+      ],
+      "id": "b1000000-0000-4000-8000-000000000200",
+      "name": "Webhook",
+      "webhookId": "process-email-webhook-01b"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "messageId": {
+          "__rl": true,
+          "value": "={{ $json.body.id }}",
+          "mode": "id"
+        },
+        "output": "raw",
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        2360,
+        -16
+      ],
+      "id": "b1000000-0000-4000-8000-000000000104",
+      "name": "Fetch Email",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "jzzDNHXRz5JAGlpl",
+          "name": "Microsoft Outlook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-004",
+              "name": "businessCenterDefault",
+              "value": "10",
+              "type": "string"
+            },
+            {
+              "id": "cfg-005",
+              "name": "defaultDiscountPerc",
+              "value": "0",
+              "type": "number"
+            },
+            {
+              "id": "cfg-006",
+              "name": "customersApiPath",
+              "value": "/api/Customers2",
+              "type": "string"
+            },
+            {
+              "id": "cfg-007",
+              "name": "customerCacheTTLHours",
+              "value": "24",
+              "type": "number"
+            },
+            {
+              "id": "cfg-008",
+              "name": "notifyEmail",
+              "value": "vlatko.goljevacki@gmail.com",
+              "type": "string"
+            },
+            {
+              "id": "cfg-009",
+              "name": "errorNotifyEmail",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "cfg-010",
+              "name": "parseHtmlBody",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "cfg-011",
+              "name": "aiParsingEnabled",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2496,
+        -96
+      ],
+      "id": "b1000000-0000-4000-8000-000000000040",
+      "name": "Config"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "LWeqg7YdOmpQWQP6"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2736,
+        -96
+      ],
+      "id": "b1000000-0000-4000-8000-000000000095",
+      "name": "WF-00b: Get Token",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1000001-0000-4000-8000-000000000002",
+              "name": "senderEmail",
+              "value": "={{ $('Fetch Email').first().json.from.emailAddress.address }}",
+              "type": "string"
+            },
+            {
+              "id": "c1000001-0000-4000-8000-000000000004",
+              "name": "emailSubject",
+              "value": "={{ $('Fetch Email').first().json.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "c1000001-0000-4000-8000-000000000005",
+              "name": "emailId",
+              "value": "={{ $('Fetch Email').first().json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "c1000001-0000-4000-8000-000000000006",
+              "name": "hasAttachments",
+              "value": "={{ $('Fetch Email').first().json.hasAttachments }}",
+              "type": "boolean"
+            },
+            {
+              "id": "c1000001-0000-4000-8000-000000000007",
+              "name": "receivedAt",
+              "value": "={{ $('Fetch Email').first().json.receivedDateTime }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3040,
+        -96
+      ],
+      "id": "b1000000-0000-4000-8000-000000000002",
+      "name": "Extract Email Metadata"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "d1000001-0000-4000-8000-000000000001",
+              "leftValue": "={{ $('Extract Email Metadata').item.json.hasAttachments }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        -96
+      ],
+      "id": "b1000000-0000-4000-8000-000000000003",
+      "name": "Has Attachments?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Re-attach binary data from trigger and carry config\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\n\nconst binary = $('Fetch Email').first().binary || {};\nconst binaryKeys = Object.keys(binary);\nconst renamedBinary = {};\nif (binaryKeys.length > 0) {\n  renamedBinary.data = binary[binaryKeys[0]];\n  for (let i = 1; i < binaryKeys.length; i++) {\n    renamedBinary[binaryKeys[i]] = binary[binaryKeys[i]];\n  }\n}\n\nreturn [{\n  json: {\n    config: config,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    businessCenter: config.businessCenterDefault,\n    defaultDiscountPerc: config.defaultDiscountPerc\n  },\n  binary: renamedBinary\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        -208
+      ],
+      "id": "b1000000-0000-4000-8000-000000000020",
+      "name": "Prepare Parser Input"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3600,
+        0
+      ],
+      "id": "b1000000-0000-4000-8000-000000000005",
+      "name": "No Attachments (skip)"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tu3iR5DJRA1oAEv6"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3840,
+        -208
+      ],
+      "id": "b1000000-0000-4000-8000-000000000021",
+      "name": "WF-03: Parse XLSX",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "d1000003-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.matched }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        -208
+      ],
+      "id": "b1000000-0000-4000-8000-000000000022",
+      "name": "Parse Succeeded?"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4336,
+        -80
+      ],
+      "id": "b1000000-0000-4000-8000-000000000030",
+      "name": "Parse Failed"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Output one item per unique delivery place ID for individual DT lookups\nconst parseResult = $input.first().json;\nconst orderLines = parseResult.orderLines || [];\nconst accessToken = $('WF-00b: Get Token').first().json.accessToken;\n\nconst ids = [...new Set(orderLines.map(l => l.pharmacyId).filter(Boolean))];\n\n// Output one item per delivery place ID\nreturn ids.map(id => ({ json: { deliveryPlaceId: id, accessToken, parseResult } }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4208,
+        -608
+      ],
+      "id": "b1000000-0000-4000-8000-000000000080",
+      "name": "Extract Order Delivery IDs"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "IorEZZc62YoIw0PA",
+          "mode": "list",
+          "cachedResultName": "Customers",
+          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/IorEZZc62YoIw0PA"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "deliveryPlaceId",
+              "keyValue": "={{ $json.deliveryPlaceId }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4464,
+        -608
+      ],
+      "id": "b1000000-0000-4000-8000-000000000081",
+      "name": "DT: Lookup Delivery Places",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate per-ID DT lookup results into a single customer lookup\nconst firstItem = $('Extract Order Delivery IDs').first().json;\nconst parseResult = firstItem.parseResult;\nconst accessToken = firstItem.accessToken;\n\n// Collect all requested delivery place IDs\nconst requestedItems = $('Extract Order Delivery IDs').all();\nconst requestedIds = requestedItems.map(i => i.json.deliveryPlaceId);\n\n// Build lookup from DT results (one result per requested ID)\nconst dtRows = $('DT: Lookup Delivery Places').all();\nconst deliveryPlaceById = {};\nconst customerById = {};\n\nfor (const row of dtRows) {\n  const r = row.json;\n  if (r.deliveryPlaceId) {\n    deliveryPlaceById[r.deliveryPlaceId] = {\n      customerId: r.customerId,\n      customerName: r.customerName,\n      name: r.name,\n      city: r.city,\n      postCode: r.postCode,\n      street: r.street\n    };\n    if (r.customerId && !customerById[r.customerId]) {\n      customerById[r.customerId] = {\n        name: r.customerName,\n        oib: r.oib,\n        city: r.city,\n        postCode: r.postCode,\n        street: r.street\n      };\n    }\n  }\n}\n\nconst missingIds = requestedIds.filter(id => !deliveryPlaceById[id]);\n\nreturn [{\n  json: {\n    ...parseResult,\n    accessToken,\n    customerLookup: {\n      customerById,\n      deliveryPlaceById,\n      totalCustomers: Object.keys(customerById).length,\n      totalDeliveryPlaces: Object.keys(deliveryPlaceById).length,\n      source: 'datatable'\n    },\n    missingDeliveryPlaceIds: missingIds,\n    hasMissing: missingIds.length > 0\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4704,
+        -608
+      ],
+      "id": "b1000000-0000-4000-8000-000000000082",
+      "name": "Build Customer Lookup"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "d1000080-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.hasMissing }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        4928,
+        -608
+      ],
+      "id": "b1000000-0000-4000-8000-000000000083",
+      "name": "Has Missing?"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Ca6USlpwwebcje0c"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        5232,
+        -624
+      ],
+      "id": "b1000000-0000-4000-8000-000000000084",
+      "name": "WF-07: Refresh Customers",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Discard WF-07 output, re-emit original order delivery place IDs\nreturn $('Extract Order Delivery IDs').all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5456,
+        -624
+      ],
+      "id": "b1000000-0000-4000-8000-000000000087",
+      "name": "Restore Order IDs"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "IorEZZc62YoIw0PA",
+          "mode": "list",
+          "cachedResultName": "Customers",
+          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/IorEZZc62YoIw0PA"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "deliveryPlaceId",
+              "keyValue": "={{ $json.deliveryPlaceId }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        5680,
+        -624
+      ],
+      "id": "b1000000-0000-4000-8000-000000000085",
+      "name": "Re-lookup Delivery Places",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Rebuild lookup after WF-07 refresh\nconst firstItem = $('Extract Order Delivery IDs').first().json;\nconst parseResult = firstItem.parseResult;\nconst accessToken = firstItem.accessToken;\n\nconst requestedItems = $('Extract Order Delivery IDs').all();\nconst requestedIds = requestedItems.map(i => i.json.deliveryPlaceId);\n\nconst dtRows = $('Re-lookup Delivery Places').all();\nconst deliveryPlaceById = {};\nconst customerById = {};\n\nfor (const row of dtRows) {\n  const r = row.json;\n  if (r.deliveryPlaceId) {\n    deliveryPlaceById[r.deliveryPlaceId] = {\n      customerId: r.customerId,\n      customerName: r.customerName,\n      name: r.name,\n      city: r.city,\n      postCode: r.postCode,\n      street: r.street\n    };\n    if (r.customerId && !customerById[r.customerId]) {\n      customerById[r.customerId] = {\n        name: r.customerName,\n        oib: r.oib,\n        city: r.city,\n        postCode: r.postCode,\n        street: r.street\n      };\n    }\n  }\n}\n\nconst missingIds = requestedIds.filter(id => !deliveryPlaceById[id]);\nif (missingIds.length > 0) {\n  console.log('Still missing after refresh: ' + missingIds.join(', '));\n}\n\nreturn [{\n  json: {\n    ...parseResult,\n    accessToken,\n    customerLookup: {\n      customerById,\n      deliveryPlaceById,\n      totalCustomers: Object.keys(customerById).length,\n      totalDeliveryPlaces: Object.keys(deliveryPlaceById).length,\n      source: 'datatable_refreshed'\n    },\n    missingDeliveryPlaceIds: missingIds,\n    hasMissing: missingIds.length > 0\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6048,
+        -624
+      ],
+      "id": "b1000000-0000-4000-8000-000000000086",
+      "name": "Rebuild Customer Lookup"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "d1000080-0000-4000-8000-000000000002",
+              "leftValue": "={{ $json.hasMissing }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        6272,
+        -624
+      ],
+      "id": "b1000000-0000-4000-8000-000000000088",
+      "name": "All Found After Refresh?"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        6576,
+        -608
+      ],
+      "id": "b1000000-0000-4000-8000-000000000089",
+      "name": "Customer Lookup Failed"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare input for data validation with customer lookup from DataTable\nconst lookupResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json;\n\nreturn [{\n  json: {\n    config: config,\n    orderLines: lookupResult.orderLines || [],\n    lineCount: lookupResult.lineCount || 0,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    defaultDiscountPerc: parserInput.defaultDiscountPerc,\n    customerLookup: lookupResult.customerLookup\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4320,
+        -272
+      ],
+      "id": "b1000000-0000-4000-8000-000000000023",
+      "name": "Prepare Validator Input"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "GtoJqRCiEqFehc84"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        4560,
+        -272
+      ],
+      "id": "b1000000-0000-4000-8000-000000000024",
+      "name": "WF-04: Validate Data",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const validationResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json;\n\nconst cleanedLines = (validationResult.validatedLines || []).map(line => {\n  const { rawData, ...rest } = line;\n  return rest;\n});\n\nreturn [{\n  json: {\n    config: config,\n    validated: validationResult.validated,\n    lineCount: validationResult.lineCount,\n    summary: validationResult.summary,\n    validatedLines: cleanedLines,\n    invalidLines: (validationResult.invalidLines || []).map(line => {\n      const { rawData, ...rest } = line;\n      return rest;\n    }),\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    businessCenter: parserInput.businessCenter\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4832,
+        -272
+      ],
+      "id": "b1000000-0000-4000-8000-000000000032",
+      "name": "Prepare Submission Input"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "oxQuEAdjRAlJXhLg"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        5216,
+        -272
+      ],
+      "id": "b1000000-0000-4000-8000-000000000028",
+      "name": "WF-06: Submit Order",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const submissionResult = $input.first().json;\nconst submissionInput = $('Prepare Submission Input').first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\n\nconst emailBody = $('Fetch Email').first().json.body || {};\n\nconst binary = $('Fetch Email').first().binary || {};\nconst binaryKeys = Object.keys(binary);\nconst attachmentBinary = {};\nif (binaryKeys.length > 0) {\n  attachmentBinary.data = binary[binaryKeys[0]];\n}\n\nreturn [{\n  json: {\n    config: config,\n    submissionResult: submissionResult,\n    validatedLines: submissionInput.validatedLines,\n    invalidLines: submissionInput.invalidLines,\n    summary: submissionInput.summary,\n    lineCount: submissionInput.lineCount,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    businessCenter: submissionInput.businessCenter,\n    emailBodyHtml: emailBody.content || ''\n  },\n  binary: attachmentBinary\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5552,
+        -272
+      ],
+      "id": "b1000000-0000-4000-8000-000000000033",
+      "name": "Prepare Notification Input"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CaAisJdV6WL3kp6j"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        5856,
+        -272
+      ],
+      "id": "b1000000-0000-4000-8000-000000000026",
+      "name": "WF-05: Send Order Notification",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "messageId": {
+          "__rl": true,
+          "value": "={{ $('Extract Email Metadata').first().json.emailId }}",
+          "mode": "id"
+        },
+        "updateFields": {
+          "isRead": true
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        6176,
+        -272
+      ],
+      "id": "b1000000-0000-4000-8000-000000000070",
+      "name": "Mark as Read",
+      "webhookId": "7062b306-8abb-42fe-ad46-5feccf01c716",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "jzzDNHXRz5JAGlpl",
+          "name": "Microsoft Outlook account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "messageId": "={{ $('Extract Email Metadata').item.json.emailId }}",
+        "folderId": {
+          "__rl": true,
+          "value": "AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l-fZwFAQBhdL-ANklNR6oMNJhB5iOiAAAB7sV_AAAA",
+          "mode": "list",
+          "cachedResultName": "Processed",
+          "cachedResultUrl": "https://outlook.office365.com/mail/AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l%2FfZwFAQBhdL%2FANklNR6oMNJhB5iOiAAAB7sV_AAAA"
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        6560,
+        288
+      ],
+      "id": "b1000000-0000-4000-8000-000000000071",
+      "name": "Move to Processed",
+      "webhookId": "492e9eae-734a-4a72-9da8-b0c62db31f7c",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "jzzDNHXRz5JAGlpl",
+          "name": "Microsoft Outlook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "messageId": "={{ $('Extract Email Metadata').item.json.emailId }}",
+        "folderId": {
+          "__rl": true,
+          "value": "AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l-fZwFAQBhdL-ANklNR6oMNJhB5iOiAAAB7sWAAAAA",
+          "mode": "list",
+          "cachedResultName": "Error",
+          "cachedResultUrl": "https://outlook.office365.com/mail/AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l%2FfZwFAQBhdL%2FANklNR6oMNJhB5iOiAAAB7sWAAAAA"
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        6880,
+        0
+      ],
+      "id": "b1000000-0000-4000-8000-000000000072",
+      "name": "Move to Error",
+      "webhookId": "fcc63d92-044d-45e8-870d-699d33661036",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "jzzDNHXRz5JAGlpl",
+          "name": "Microsoft Outlook account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Email": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "WF-00b: Get Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-00b: Get Token": {
+      "main": [
+        [
+          {
+            "node": "Extract Email Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Email Metadata": {
+      "main": [
+        [
+          {
+            "node": "Has Attachments?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Attachments?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Parser Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Attachments (skip)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Parser Input": {
+      "main": [
+        [
+          {
+            "node": "WF-03: Parse XLSX",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-03: Parse XLSX": {
+      "main": [
+        [
+          {
+            "node": "Parse Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Extract Order Delivery IDs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parse Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Order Delivery IDs": {
+      "main": [
+        [
+          {
+            "node": "DT: Lookup Delivery Places",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DT: Lookup Delivery Places": {
+      "main": [
+        [
+          {
+            "node": "Build Customer Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Customer Lookup": {
+      "main": [
+        [
+          {
+            "node": "Has Missing?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Missing?": {
+      "main": [
+        [
+          {
+            "node": "WF-07: Refresh Customers",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Validator Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-07: Refresh Customers": {
+      "main": [
+        [
+          {
+            "node": "Restore Order IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Order IDs": {
+      "main": [
+        [
+          {
+            "node": "Re-lookup Delivery Places",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Re-lookup Delivery Places": {
+      "main": [
+        [
+          {
+            "node": "Rebuild Customer Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rebuild Customer Lookup": {
+      "main": [
+        [
+          {
+            "node": "All Found After Refresh?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "All Found After Refresh?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Validator Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Customer Lookup Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Customer Lookup Failed": {
+      "main": [
+        [
+          {
+            "node": "Move to Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Validator Input": {
+      "main": [
+        [
+          {
+            "node": "WF-04: Validate Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-04: Validate Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare Submission Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Submission Input": {
+      "main": [
+        [
+          {
+            "node": "WF-06: Submit Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-06: Submit Order": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notification Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Notification Input": {
+      "main": [
+        [
+          {
+            "node": "WF-05: Send Order Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-05: Send Order Notification": {
+      "main": [
+        [
+          {
+            "node": "Mark as Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark as Read": {
+      "main": [
+        [
+          {
+            "node": "Move to Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Attachments (skip)": {
+      "main": [
+        [
+          {
+            "node": "Move to Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Failed": {
+      "main": [
+        [
+          {
+            "node": "Move to Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": []
+}
