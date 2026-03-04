@@ -180,6 +180,19 @@
     },
     {
       "parameters": {
+        "jsCode": "// Check binary attachments for XLSX/XLS files\nconst binary = $('Fetch Email').first().binary || {};\nconst binaryKeys = Object.keys(binary);\nlet hasXlsx = false;\n\nfor (const key of binaryKeys) {\n  const b = binary[key];\n  const fileName = (b.fileName || '').toLowerCase();\n  const mimeType = (b.mimeType || '').toLowerCase();\n  if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') ||\n      mimeType.includes('spreadsheetml') || mimeType.includes('ms-excel')) {\n    hasXlsx = true;\n    break;\n  }\n}\n\nreturn [{ json: { ...$input.first().json, _hasXlsx: hasXlsx } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3280,
+        -96
+      ],
+      "id": "b1000000-0000-4000-8000-000000000300",
+      "name": "Classify Attachment"
+    },
+    {
+      "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
@@ -188,8 +201,8 @@
           },
           "conditions": [
             {
-              "id": "d1000001-0000-4000-8000-000000000001",
-              "leftValue": "={{ $('Extract Email Metadata').item.json.hasAttachments }}",
+              "id": "d1000300-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json._hasXlsx }}",
               "rightValue": true,
               "operator": {
                 "type": "boolean",
@@ -204,11 +217,11 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        3360,
+        3480,
         -96
       ],
-      "id": "b1000000-0000-4000-8000-000000000003",
-      "name": "Has Attachments?"
+      "id": "b1000000-0000-4000-8000-000000000301",
+      "name": "Has XLSX?"
     },
     {
       "parameters": {
@@ -217,22 +230,11 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3600,
+        3700,
         -208
       ],
       "id": "b1000000-0000-4000-8000-000000000020",
       "name": "Prepare Parser Input"
-    },
-    {
-      "parameters": {},
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [
-        3600,
-        0
-      ],
-      "id": "b1000000-0000-4000-8000-000000000005",
-      "name": "No Attachments (skip)"
     },
     {
       "parameters": {
@@ -254,7 +256,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        3840,
+        3940,
         -208
       ],
       "id": "b1000000-0000-4000-8000-000000000021",
@@ -288,7 +290,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        4080,
+        4180,
         -208
       ],
       "id": "b1000000-0000-4000-8000-000000000022",
@@ -299,11 +301,112 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        4336,
+        4436,
         -80
       ],
       "id": "b1000000-0000-4000-8000-000000000030",
       "name": "Parse Failed"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Package email body and metadata for WF-08\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\nconst emailBody = $('Fetch Email').first().json.body || {};\n\nreturn [{\n  json: {\n    emailBodyHtml: emailBody.content || '',\n    emailBodyType: emailBody.contentType || 'html',\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    config: config\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3700,
+        120
+      ],
+      "id": "b1000000-0000-4000-8000-000000000302",
+      "name": "Prepare Body Parser Input"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "aCdFjNcNnb20gSUs"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3940,
+        120
+      ],
+      "id": "b1000000-0000-4000-8000-000000000303",
+      "name": "WF-08: Parse Email Body",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "d1000304-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.matched }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        4180,
+        120
+      ],
+      "id": "b1000000-0000-4000-8000-000000000304",
+      "name": "Body Parse Succeeded?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build warning email for admin when no order data found\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\nconst emailBody = $('Fetch Email').first().json.body || {};\nconst bodyContent = emailBody.content || '';\nconst excerpt = bodyContent.replace(/<[^>]*>/g, '').substring(0, 500);\n\nconst html = '<div style=\"font-family: Arial, sans-serif; max-width: 600px;\">'\n  + '<h2 style=\"color: #d35400;\">No Order Data Found</h2>'\n  + '<p>An email was received but no order data could be extracted from the body or attachments.</p>'\n  + '<table style=\"border-collapse: collapse; width: 100%; margin: 16px 0;\">'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">From</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + emailMeta.senderEmail + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">Subject</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + emailMeta.emailSubject + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">Received</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + emailMeta.receivedAt + '</td></tr>'\n  + '</table>'\n  + '<h3>Body Excerpt:</h3>'\n  + '<div style=\"background: #f9f9f9; padding: 12px; border-left: 3px solid #d35400; white-space: pre-wrap;\">'\n  + excerpt + '</div>'\n  + '<p style=\"color: #888; margin-top: 16px;\">The email has been moved to the Error folder. Please review manually.</p>'\n  + '</div>';\n\nreturn [{\n  json: {\n    to: config.notifyEmail,\n    subject: '[Medika Pre-Orders] Warning: No order data - ' + emailMeta.emailSubject,\n    bodyHtml: html\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4436,
+        240
+      ],
+      "id": "b1000000-0000-4000-8000-000000000305",
+      "name": "Build Warning Email"
+    },
+    {
+      "parameters": {
+        "toRecipients": "={{ $('Config').first().json.notifyEmail }}",
+        "subject": "={{ $json.subject }}",
+        "bodyContent": "={{ $json.bodyHtml }}",
+        "additionalFields": {
+          "bodyContentType": "html"
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        4676,
+        240
+      ],
+      "id": "b1000000-0000-4000-8000-000000000306",
+      "name": "Send Warning Email",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "jzzDNHXRz5JAGlpl",
+          "name": "Microsoft Outlook account"
+        }
+      }
     },
     {
       "parameters": {
@@ -312,7 +415,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4208,
+        4308,
         -608
       ],
       "id": "b1000000-0000-4000-8000-000000000080",
@@ -342,7 +445,7 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        4464,
+        4564,
         -608
       ],
       "id": "b1000000-0000-4000-8000-000000000081",
@@ -356,7 +459,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4704,
+        4804,
         -608
       ],
       "id": "b1000000-0000-4000-8000-000000000082",
@@ -388,7 +491,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        4928,
+        5028,
         -608
       ],
       "id": "b1000000-0000-4000-8000-000000000083",
@@ -414,7 +517,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        5232,
+        5332,
         -624
       ],
       "id": "b1000000-0000-4000-8000-000000000084",
@@ -428,7 +531,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        5456,
+        5556,
         -624
       ],
       "id": "b1000000-0000-4000-8000-000000000087",
@@ -458,7 +561,7 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        5680,
+        5780,
         -624
       ],
       "id": "b1000000-0000-4000-8000-000000000085",
@@ -472,7 +575,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        6048,
+        6148,
         -624
       ],
       "id": "b1000000-0000-4000-8000-000000000086",
@@ -504,7 +607,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        6272,
+        6372,
         -624
       ],
       "id": "b1000000-0000-4000-8000-000000000088",
@@ -515,7 +618,7 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        6576,
+        6676,
         -608
       ],
       "id": "b1000000-0000-4000-8000-000000000089",
@@ -523,12 +626,12 @@
     },
     {
       "parameters": {
-        "jsCode": "// Prepare input for data validation with customer lookup from DataTable\nconst lookupResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json;\n\nreturn [{\n  json: {\n    config: config,\n    orderLines: lookupResult.orderLines || [],\n    lineCount: lookupResult.lineCount || 0,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    defaultDiscountPerc: parserInput.defaultDiscountPerc,\n    customerLookup: lookupResult.customerLookup\n  }\n}];"
+        "jsCode": "// Prepare input for data validation with customer lookup from DataTable\nconst lookupResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\n\nreturn [{\n  json: {\n    config: config,\n    orderLines: lookupResult.orderLines || [],\n    lineCount: lookupResult.lineCount || 0,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    defaultDiscountPerc: config.defaultDiscountPerc,\n    customerLookup: lookupResult.customerLookup\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4320,
+        4420,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000023",
@@ -546,7 +649,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        4560,
+        4660,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000024",
@@ -555,12 +658,12 @@
     },
     {
       "parameters": {
-        "jsCode": "const validationResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst parserInput = $('Prepare Parser Input').first().json;\nconst config = $('Config').first().json;\n\nconst cleanedLines = (validationResult.validatedLines || []).map(line => {\n  const { rawData, ...rest } = line;\n  return rest;\n});\n\nreturn [{\n  json: {\n    config: config,\n    validated: validationResult.validated,\n    lineCount: validationResult.lineCount,\n    summary: validationResult.summary,\n    validatedLines: cleanedLines,\n    invalidLines: (validationResult.invalidLines || []).map(line => {\n      const { rawData, ...rest } = line;\n      return rest;\n    }),\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    businessCenter: parserInput.businessCenter\n  }\n}];\n"
+        "jsCode": "const validationResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\n\nconst cleanedLines = (validationResult.validatedLines || []).map(line => {\n  const { rawData, ...rest } = line;\n  return rest;\n});\n\nreturn [{\n  json: {\n    config: config,\n    validated: validationResult.validated,\n    lineCount: validationResult.lineCount,\n    summary: validationResult.summary,\n    validatedLines: cleanedLines,\n    invalidLines: (validationResult.invalidLines || []).map(line => {\n      const { rawData, ...rest } = line;\n      return rest;\n    }),\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    businessCenter: config.businessCenterDefault\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4832,
+        4932,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000032",
@@ -578,7 +681,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        5216,
+        5316,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000028",
@@ -592,7 +695,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        5552,
+        5652,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000033",
@@ -610,7 +713,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        5856,
+        5956,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000026",
@@ -632,7 +735,7 @@
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        6176,
+        6276,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000070",
@@ -661,7 +764,7 @@
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        6560,
+        6660,
         288
       ],
       "id": "b1000000-0000-4000-8000-000000000071",
@@ -689,7 +792,7 @@
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        6880,
+        6980,
         0
       ],
       "id": "b1000000-0000-4000-8000-000000000072",
@@ -752,14 +855,25 @@
       "main": [
         [
           {
-            "node": "Has Attachments?",
+            "node": "Classify Attachment",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Has Attachments?": {
+    "Classify Attachment": {
+      "main": [
+        [
+          {
+            "node": "Has XLSX?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has XLSX?": {
       "main": [
         [
           {
@@ -770,7 +884,7 @@
         ],
         [
           {
-            "node": "No Attachments (skip)",
+            "node": "Prepare Body Parser Input",
             "type": "main",
             "index": 0
           }
@@ -811,6 +925,79 @@
         [
           {
             "node": "Parse Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Failed": {
+      "main": [
+        [
+          {
+            "node": "Move to Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Body Parser Input": {
+      "main": [
+        [
+          {
+            "node": "WF-08: Parse Email Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-08: Parse Email Body": {
+      "main": [
+        [
+          {
+            "node": "Body Parse Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Body Parse Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Extract Order Delivery IDs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Warning Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Warning Email": {
+      "main": [
+        [
+          {
+            "node": "Send Warning Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Warning Email": {
+      "main": [
+        [
+          {
+            "node": "Move to Error",
             "type": "main",
             "index": 0
           }
@@ -1012,28 +1199,6 @@
         [
           {
             "node": "Move to Processed",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "No Attachments (skip)": {
-      "main": [
-        [
-          {
-            "node": "Move to Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Failed": {
-      "main": [
-        [
-          {
-            "node": "Move to Error",
             "type": "main",
             "index": 0
           }

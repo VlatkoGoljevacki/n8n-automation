@@ -1,0 +1,232 @@
+{
+  "name": "[medika-preorders] WF-08: Email Body Parser",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f8000000-0000-4000-8000-000000000001",
+      "name": "Sub-Workflow Input"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5.2",
+          "mode": "list",
+          "cachedResultName": "GPT-5.2"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "You are an expert data extraction assistant for Croatian pharmaceutical pre-orders.\n\nAnalyze the email body HTML below and extract any order data you find.\n\nLook for:\n- Drug/product codes (šifra proizvoda, šifra artikla) — typically numeric strings like \"3001234\"\n- Article/product names (naziv, artikl, proizvod)\n- Quantities (količina, kom, qty)\n- Pharmacy identifiers (šifra primatelja, šifra ljekarne) — 10-digit strings starting with \"7700\"\n- Pharmacy names (naziv ljekarne)\n- Units (jedinica, jm) — default \"kom\"\n- Discount percentages (rabat, popust)\n- Notes/comments (napomena)\n\nThe email may contain:\n- HTML tables with order data\n- Plain text lists of products and quantities\n- Mixed content with order info embedded in prose\n- Croatian language content\n\nReturn ONLY a raw JSON array. No markdown fences, no explanation, no extra text.\n\nEach element must have this schema:\n{\"drugCode\": \"string or null\", \"articleName\": \"string or null\", \"quantity\": number, \"unit\": \"string\", \"pharmacyId\": \"string or null\", \"pharmacyName\": \"string or null\", \"discount\": number, \"notes\": \"string\"}\n\nField details:\n- drugCode: product code string or null\n- articleName: product name string or null\n- quantity: exact number from the email. If quantity is not specified, default to 1\n- unit: default \"kom\"\n- pharmacyId: 10-digit string starting with \"7700\" or null\n- pharmacyName: pharmacy name string or null\n- discount: percentage number (convert decimals: 0.12 → 12). Default 0\n- notes: default \"\"\n\nRules:\n- Extract ALL order lines you find\n- Only extract actual order data — not signatures, disclaimers, or forwarded headers\n- Skip totals/summary rows (UKUPNO, TOTAL)\n- If the email contains NO order data at all, return an empty array: []\n- Preserve exact quantities — never guess or infer numbers"
+            },
+            {
+              "content": "={{ $json.emailBodyHtml }}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 16384
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        320,
+        0
+      ],
+      "id": "f8000000-0000-4000-8000-000000000002",
+      "name": "LLM: Extract Orders from Body",
+      "credentials": {
+        "openAiApi": {
+          "id": "eD10IPhcxdI4yu0p",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the extraction LLM response\nconst data = $input.first().json;\nconst inputData = $('Sub-Workflow Input').first().json;\nlet aiText = '';\n\ntry {\n  aiText = (typeof data.text === 'string' && data.text)\n    || (data.output && data.output.find(o => o.type === 'message')?.content?.[0]?.text)\n    || (data.output && data.output[0]?.content?.[0]?.text)\n    || '';\n  if (!aiText) throw new Error('Empty response from LLM');\n} catch (e) {\n  return [{ json: { matched: false, error: 'Failed to parse LLM response: ' + e.message, orderLines: [], lineCount: 0 } }];\n}\n\nlet jsonStr = aiText.trim();\nif (jsonStr.startsWith('```')) {\n  jsonStr = jsonStr.replace(/^```(?:json)?\\n?/, '').replace(/\\n?```$/, '');\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(jsonStr);\n} catch (e) {\n  const match = jsonStr.match(/\\[[\\s\\S]*\\]/);\n  if (match) {\n    try { parsed = JSON.parse(match[0]); }\n    catch (e2) { return [{ json: { matched: false, error: 'Invalid JSON from LLM: ' + e.message, orderLines: [], lineCount: 0 } }]; }\n  } else {\n    return [{ json: { matched: false, error: 'No JSON array in LLM response', orderLines: [], lineCount: 0 } }];\n  }\n}\n\nif (!Array.isArray(parsed)) {\n  return [{ json: { matched: false, error: 'LLM did not return an array', orderLines: [], lineCount: 0 } }];\n}\n\nif (parsed.length === 0) {\n  return [{ json: { matched: false, error: 'No order data found in email body', orderLines: [], lineCount: 0 } }];\n}\n\nconst orderLines = parsed.map(line => ({\n  sourceSheet: 'EmailBody',\n  sourceRow: null,\n  pharmacyId: line.pharmacyId || null,\n  pharmacyName: line.pharmacyName || null,\n  drugCode: line.drugCode ? String(line.drugCode) : null,\n  articleName: line.articleName ? String(line.articleName) : null,\n  quantity: Number(line.quantity) || 1,\n  unit: line.unit || 'kom',\n  discount: line.discount != null ? (Number(line.discount) || 0) : 0,\n  notes: line.notes || '',\n  parseMethod: 'EMAIL_BODY_AI',\n  parseConfidence: 0.7,\n  rawData: line\n}));\n\n// Build compact version for verification prompt\nconst compactLines = orderLines.map(l => ({\n  drugCode: l.drugCode,\n  articleName: l.articleName,\n  quantity: l.quantity,\n  unit: l.unit,\n  pharmacyId: l.pharmacyId,\n  pharmacyName: l.pharmacyName,\n  discount: l.discount\n}));\n\nconst verifyPrompt = 'You are a data verification assistant for Croatian pharmacy pre-orders.\\n\\n'\n  + 'Re-read the email body below independently and compare against the extracted order lines.\\n\\n'\n  + 'Check for:\\n'\n  + '- Wrong quantities (must match source exactly)\\n'\n  + '- Missing order lines (products mentioned but not extracted)\\n'\n  + '- Wrong drug codes or article names\\n'\n  + '- Wrong pharmacy info\\n'\n  + '- Hallucinated lines not in the source email\\n'\n  + '- TOTALS ROWS: Verify no totals/summary rows were misinterpreted as order lines\\n\\n'\n  + 'Return ONLY a corrected raw JSON array with the same schema. '\n  + 'No markdown fences, no explanation. If everything is correct, return the same array unchanged.\\n\\n'\n  + 'Extracted order lines to verify:\\n'\n  + JSON.stringify(compactLines);\n\nreturn [{\n  json: {\n    matched: true,\n    lineCount: orderLines.length,\n    orderLines: orderLines,\n    verifyPrompt: verifyPrompt,\n    emailBodyHtml: inputData.emailBodyHtml\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        0
+      ],
+      "id": "f8000000-0000-4000-8000-000000000003",
+      "name": "Parse AI Response"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "f8000000-cond-4000-8000-000000000001",
+              "leftValue": "={{ $json.matched }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "f8000000-0000-4000-8000-000000000006",
+      "name": "Has Order Data?"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-5-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "={{ $json.verifyPrompt }}"
+            },
+            {
+              "content": "Email body to verify against:\n\n={{ $json.emailBodyHtml }}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 16384
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        1120,
+        -100
+      ],
+      "id": "f8000000-0000-4000-8000-000000000004",
+      "name": "LLM: Verify Extraction",
+      "credentials": {
+        "openAiApi": {
+          "id": "eD10IPhcxdI4yu0p",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the verification LLM response and produce final output\nconst data = $input.first().json;\nconst originalResult = $('Parse AI Response').first().json;\n\nif (!originalResult.matched || !originalResult.orderLines || originalResult.orderLines.length === 0) {\n  return [{ json: { matched: false, orderLines: [], lineCount: 0, parseMethod: 'EMAIL_BODY_AI' } }];\n}\n\nlet aiText = '';\ntry {\n  aiText = (typeof data.text === 'string' && data.text)\n    || (data.output && data.output.find(o => o.type === 'message')?.content?.[0]?.text)\n    || (data.output && data.output[0]?.content?.[0]?.text)\n    || '';\n  if (!aiText) throw new Error('Empty response');\n} catch (e) {\n  // Verification failed — fall back to original extraction\n  const fallback = { ...originalResult };\n  delete fallback.verifyPrompt;\n  delete fallback.emailBodyHtml;\n  fallback.verificationError = 'Failed to parse verification response: ' + e.message;\n  return [{ json: fallback }];\n}\n\nlet jsonStr = aiText.trim();\nif (jsonStr.startsWith('```')) {\n  jsonStr = jsonStr.replace(/^```(?:json)?\\n?/, '').replace(/\\n?```$/, '');\n}\n\nlet verified;\ntry {\n  verified = JSON.parse(jsonStr);\n} catch (e) {\n  const match = jsonStr.match(/\\[[\\s\\S]*\\]/);\n  if (match) {\n    try { verified = JSON.parse(match[0]); }\n    catch (e2) {\n      const fallback = { ...originalResult };\n      delete fallback.verifyPrompt;\n      delete fallback.emailBodyHtml;\n      fallback.verificationError = 'Invalid JSON from verification: ' + e.message;\n      return [{ json: fallback }];\n    }\n  } else {\n    const fallback = { ...originalResult };\n    delete fallback.verifyPrompt;\n    delete fallback.emailBodyHtml;\n    fallback.verificationError = 'Invalid JSON from verification: ' + e.message;\n    return [{ json: fallback }];\n  }\n}\n\nif (!Array.isArray(verified)) {\n  const fallback = { ...originalResult };\n  delete fallback.verifyPrompt;\n  delete fallback.emailBodyHtml;\n  fallback.verificationError = 'Verification did not return an array';\n  return [{ json: fallback }];\n}\n\nconst orderLines = verified.map(line => ({\n  sourceSheet: 'EmailBody',\n  sourceRow: null,\n  pharmacyId: line.pharmacyId || null,\n  pharmacyName: line.pharmacyName || null,\n  drugCode: line.drugCode ? String(line.drugCode) : null,\n  articleName: line.articleName ? String(line.articleName) : null,\n  quantity: Number(line.quantity) || 1,\n  unit: line.unit || 'kom',\n  discount: line.discount != null ? (Number(line.discount) || 0) : 0,\n  notes: '',\n  parseMethod: 'EMAIL_BODY_AI_VERIFIED',\n  parseConfidence: 0.9,\n  rawData: line\n}));\n\nreturn [{\n  json: {\n    matched: orderLines.length > 0,\n    lineCount: orderLines.length,\n    parseMethod: 'EMAIL_BODY_AI_VERIFIED',\n    orderLines: orderLines\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        -100
+      ],
+      "id": "f8000000-0000-4000-8000-000000000005",
+      "name": "Parse Verified Response"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        100
+      ],
+      "id": "f8000000-0000-4000-8000-000000000007",
+      "name": "No Order Data"
+    }
+  ],
+  "connections": {
+    "Sub-Workflow Input": {
+      "main": [
+        [
+          {
+            "node": "LLM: Extract Orders from Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM: Extract Orders from Body": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Has Order Data?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Order Data?": {
+      "main": [
+        [
+          {
+            "node": "LLM: Verify Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Order Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM: Verify Extraction": {
+      "main": [
+        [
+          {
+            "node": "Parse Verified Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": []
+}
