@@ -1,5 +1,5 @@
 {
-  "name": "[medika-preorders] WF-08: Email Body Parser",
+  "name": "[medika-preorders-test] WF-08: Email Body Parser",
   "active": false,
   "nodes": [
     {

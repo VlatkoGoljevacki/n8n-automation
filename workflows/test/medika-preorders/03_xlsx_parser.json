@@ -1,5 +1,5 @@
 {
-  "name": "[medika-preorders] WF-03: XLSX Parser",
+  "name": "[medika-preorders-test] WF-03: XLSX Parser",
   "active": false,
   "nodes": [
     {

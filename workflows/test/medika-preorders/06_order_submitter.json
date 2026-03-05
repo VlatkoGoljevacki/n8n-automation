@@ -1,5 +1,5 @@
 {
-  "name": "[medika-preorders] WF-06: Order Submitter",
+  "name": "[medika-preorders-test] WF-06: Order Submitter",
   "active": false,
   "nodes": [
     {
@@ -43,7 +43,7 @@
         "workflowId": {
           "__rl": true,
           "mode": "id",
-          "value": "LWeqg7YdOmpQWQP6"
+          "value": "ioZGmf1q4s2XyjK0"
         },
         "options": {}
       },

@@ -1,4 +1,7 @@
 .env
 workflows/**
 !workflows/example_**
-!workflows/medika_preorder_**
+!workflows/test/
+!workflows/test/**
+!workflows/prod/
+!workflows/prod/**

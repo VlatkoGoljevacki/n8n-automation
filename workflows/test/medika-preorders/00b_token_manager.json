@@ -1,5 +1,5 @@
 {
-  "name": "[medika-preorders] WF-00b: ERP Token Manager",
+  "name": "[medika-preorders-test] WF-00b: ERP Token Manager",
   "active": false,
   "nodes": [
     {
@@ -75,7 +75,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Check Data Table for a valid cached ERP token\nconst config = $('Config').first().json;\nconst erpApiUrl = config.erpApiUrl;\nconst erpUsername = config.erpUsername;\nconst erpPassword = config.erpPassword;\n\n// Find latest valid token from DT results\nconst dtRows = $('DT: Read Token').all();\nlet latestToken = null;\nlet latestStoredAt = 0;\n\nfor (const row of dtRows) {\n  const r = row.json;\n  if (!r.token || !r.expiresAt) continue;\n\n  const storedAt = r.storedAt ? new Date(r.storedAt).getTime() : 0;\n  if (storedAt > latestStoredAt) {\n    latestStoredAt = storedAt;\n    latestToken = r;\n  }\n}\n\n// Check if latest token is still valid (5-min buffer)\nif (latestToken) {\n  const bufferMs = 5 * 60 * 1000;\n  const expiresAt = new Date(latestToken.expiresAt).getTime();\n  if (Date.now() < (expiresAt - bufferMs)) {\n    return [{ json: {\n      needsFetch: false,\n      accessToken: latestToken.token,\n      expiresAt: latestToken.expiresAt\n    }}];\n  }\n}\n\n// Token missing or expired — prepare fetch\nreturn [{ json: {\n  needsFetch: true,\n  tokenUrl: erpApiUrl + '/Token',\n  tokenBody: 'grant_type=password&username=' + encodeURIComponent(erpUsername) + '&password=' + encodeURIComponent(erpPassword)\n}}];\n"
+        "jsCode": "// Check Data Table for a valid cached ERP token\nconst config = $('Config').first().json;\nconst erpApiUrl = config.erpApiUrl;\nconst erpUsername = config.erpUsername;\nconst erpPassword = config.erpPassword;\n\n// Find latest valid token from DT results\nconst dtRows = $('DT: Read Token').all();\nlet latestToken = null;\nlet latestStoredAt = 0;\n\nfor (const row of dtRows) {\n  const r = row.json;\n  if (!r.token || !r.expiresAt) continue;\n\n  const storedAt = r.storedAt ? new Date(r.storedAt).getTime() : 0;\n  if (storedAt > latestStoredAt) {\n    latestStoredAt = storedAt;\n    latestToken = r;\n  }\n}\n\n// Check if latest token is still valid (2-hour buffer)\nif (latestToken) {\n  const bufferMs = 2 * 60 * 60 * 1000;\n  const expiresAt = new Date(latestToken.expiresAt).getTime();\n  if (Date.now() < (expiresAt - bufferMs)) {\n    return [{ json: {\n      needsFetch: false,\n      accessToken: latestToken.token,\n      expiresAt: latestToken.expiresAt\n    }}];\n  }\n}\n\n// Token missing or expired — prepare fetch\nreturn [{ json: {\n  needsFetch: true,\n  tokenUrl: erpApiUrl + '/Token',\n  tokenBody: 'grant_type=password&username=' + encodeURIComponent(erpUsername) + '&password=' + encodeURIComponent(erpPassword)\n}}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,

@@ -1,24 +1,7 @@
 {
-  "name": "[medika-preorders] WF-01b: Process Email",
+  "name": "[medika-preorders-test] WF-01b: Process Email",
   "active": false,
   "nodes": [
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "process-email",
-        "responseMode": "onReceived",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [
-        2120,
-        -16
-      ],
-      "id": "b1000000-0000-4000-8000-000000000200",
-      "name": "Webhook",
-      "webhookId": "process-email-webhook-01b"
-    },
     {
       "parameters": {
         "operation": "get",
@@ -35,11 +18,12 @@
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        2360,
-        -16
+        2304,
+        -96
       ],
       "id": "b1000000-0000-4000-8000-000000000104",
       "name": "Fetch Email",
+      "webhookId": "0926e667-ebba-455c-9d74-eb942ba9b887",
       "credentials": {
         "microsoftOutlookOAuth2Api": {
           "id": "jzzDNHXRz5JAGlpl",
@@ -117,7 +101,7 @@
         "workflowId": {
           "__rl": true,
           "mode": "id",
-          "value": "LWeqg7YdOmpQWQP6"
+          "value": "ioZGmf1q4s2XyjK0"
         },
         "options": {}
       },
@@ -217,7 +201,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        3480,
+        3488,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000301",
@@ -230,7 +214,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3700,
+        3712,
         -208
       ],
       "id": "b1000000-0000-4000-8000-000000000020",
@@ -241,7 +225,7 @@
         "workflowId": {
           "__rl": true,
           "mode": "id",
-          "value": "tu3iR5DJRA1oAEv6"
+          "value": "py2lGeD3fqucgJLN"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
@@ -256,7 +240,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        3940,
+        3952,
         -208
       ],
       "id": "b1000000-0000-4000-8000-000000000021",
@@ -290,7 +274,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        4180,
+        4192,
         -208
       ],
       "id": "b1000000-0000-4000-8000-000000000022",
@@ -301,7 +285,7 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        4436,
+        4448,
         -80
       ],
       "id": "b1000000-0000-4000-8000-000000000030",
@@ -314,8 +298,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3700,
-        120
+        3712,
+        128
       ],
       "id": "b1000000-0000-4000-8000-000000000302",
       "name": "Prepare Body Parser Input"
@@ -325,15 +309,15 @@
         "workflowId": {
           "__rl": true,
           "mode": "id",
-          "value": "aCdFjNcNnb20gSUs"
+          "value": "APAr3L9iv7n8HkLl"
         },
         "options": {}
       },
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        3940,
-        120
+        3952,
+        128
       ],
       "id": "b1000000-0000-4000-8000-000000000303",
       "name": "WF-08: Parse Email Body",
@@ -365,8 +349,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        4180,
-        120
+        4192,
+        128
       ],
       "id": "b1000000-0000-4000-8000-000000000304",
       "name": "Body Parse Succeeded?"
@@ -378,7 +362,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4436,
+        4448,
         240
       ],
       "id": "b1000000-0000-4000-8000-000000000305",
@@ -396,11 +380,12 @@
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        4676,
+        4688,
         240
       ],
       "id": "b1000000-0000-4000-8000-000000000306",
       "name": "Send Warning Email",
+      "webhookId": "2c2a1db2-19a6-45a4-b752-e5dca40bdb71",
       "credentials": {
         "microsoftOutlookOAuth2Api": {
           "id": "jzzDNHXRz5JAGlpl",
@@ -415,7 +400,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4308,
+        4320,
         -608
       ],
       "id": "b1000000-0000-4000-8000-000000000080",
@@ -445,7 +430,7 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        4564,
+        4576,
         -608
       ],
       "id": "b1000000-0000-4000-8000-000000000081",
@@ -459,7 +444,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4804,
+        4816,
         -608
       ],
       "id": "b1000000-0000-4000-8000-000000000082",
@@ -491,7 +476,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        5028,
+        5040,
         -608
       ],
       "id": "b1000000-0000-4000-8000-000000000083",
@@ -502,7 +487,7 @@
         "workflowId": {
           "__rl": true,
           "mode": "id",
-          "value": "Ca6USlpwwebcje0c"
+          "value": "AuxPo8thYeUbZcCl"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
@@ -517,7 +502,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        5332,
+        5344,
         -624
       ],
       "id": "b1000000-0000-4000-8000-000000000084",
@@ -531,7 +516,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        5556,
+        5568,
         -624
       ],
       "id": "b1000000-0000-4000-8000-000000000087",
@@ -561,7 +546,7 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        5780,
+        5792,
         -624
       ],
       "id": "b1000000-0000-4000-8000-000000000085",
@@ -575,7 +560,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        6148,
+        6160,
         -624
       ],
       "id": "b1000000-0000-4000-8000-000000000086",
@@ -607,7 +592,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        6372,
+        6384,
         -624
       ],
       "id": "b1000000-0000-4000-8000-000000000088",
@@ -618,7 +603,7 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        6676,
+        6688,
         -608
       ],
       "id": "b1000000-0000-4000-8000-000000000089",
@@ -631,7 +616,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4420,
+        4432,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000023",
@@ -642,14 +627,14 @@
         "workflowId": {
           "__rl": true,
           "mode": "id",
-          "value": "GtoJqRCiEqFehc84"
+          "value": "t5cBAC0dSAEHIqsZ"
         },
         "options": {}
       },
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        4660,
+        4672,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000024",
@@ -663,7 +648,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4932,
+        4944,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000032",
@@ -674,14 +659,22 @@
         "workflowId": {
           "__rl": true,
           "mode": "id",
-          "value": "oxQuEAdjRAlJXhLg"
+          "value": "IVVPye7Jd4O0AFZ4"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
         },
         "options": {}
       },
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        5316,
+        5328,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000028",
@@ -695,7 +688,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        5652,
+        5664,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000033",
@@ -706,14 +699,22 @@
         "workflowId": {
           "__rl": true,
           "mode": "id",
-          "value": "CaAisJdV6WL3kp6j"
+          "value": "jHyOriThOcIbTBBw"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
         },
         "options": {}
       },
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        5956,
+        5968,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000026",
@@ -735,7 +736,7 @@
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        6276,
+        6288,
         -272
       ],
       "id": "b1000000-0000-4000-8000-000000000070",
@@ -764,7 +765,7 @@
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        6660,
+        6672,
         288
       ],
       "id": "b1000000-0000-4000-8000-000000000071",
@@ -792,7 +793,7 @@
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        6980,
+        6992,
         0
       ],
       "id": "b1000000-0000-4000-8000-000000000072",
@@ -804,20 +805,25 @@
           "name": "Microsoft Outlook account"
         }
       }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "test-process-email",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        2064,
+        -96
+      ],
+      "id": "b1000000-0000-4000-8000-000000000200",
+      "name": "Webhook",
+      "webhookId": "process-email-webhook-01b"
     }
   ],
   "connections": {
-    "Webhook": {
-      "main": [
-        [
-          {
-            "node": "Fetch Email",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Fetch Email": {
       "main": [
         [
@@ -1199,6 +1205,17 @@
         [
           {
             "node": "Move to Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch Email",
             "type": "main",
             "index": 0
           }

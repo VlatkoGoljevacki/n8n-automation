@@ -1,5 +1,5 @@
 {
-  "name": "[medika-preorders] WF-05: Send Order Notification",
+  "name": "[medika-preorders-test] WF-05: Send Order Notification",
   "active": false,
   "nodes": [
     {

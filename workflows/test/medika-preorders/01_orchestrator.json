@@ -1,5 +1,5 @@
 {
-  "name": "[medika-preorders] WF-01: Orchestrator",
+  "name": "[medika-preorders-test] WF-01: Orchestrator",
   "active": false,
   "nodes": [
     {
@@ -7,8 +7,7 @@
         "rule": {
           "interval": [
             {
-              "field": "minutes",
-              "minutesInterval": 5
+              "field": "minutes"
             }
           ]
         }
@@ -84,7 +83,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://localhost:5678/webhook/process-email",
+        "url": "http://localhost:5678/webhook-test/test-process-email",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}",
