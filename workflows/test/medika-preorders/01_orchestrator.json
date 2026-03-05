@@ -7,7 +7,8 @@
         "rule": {
           "interval": [
             {
-              "field": "minutes"
+              "field": "minutes",
+              "minutesInterval": 5
             }
           ]
         }
@@ -15,70 +16,140 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        1472,
-        -304
+        1232,
+        -320
       ],
       "id": "b1000000-0000-4000-8000-000000000090",
-      "name": "Poll Every Minute"
+      "name": "Poll Every 5 Minutes"
     },
     {
       "parameters": {
-        "operation": "getAll",
-        "limit": 10,
-        "output": "raw",
-        "filtersUI": {
-          "values": {
-            "filters": {
-              "foldersToInclude": [
-                "AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l-fZwFAQBhdL-ANklNR6oMNJhB5iOiAAACAQwAAAA="
-              ],
-              "readStatus": "unread"
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1-set-001",
+              "name": "tokenType",
+              "value": "graph_api",
+              "type": "string"
             }
-          }
+          ]
         },
         "options": {}
       },
-      "type": "n8n-nodes-base.microsoftOutlook",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1472,
+        -320
+      ],
+      "id": "b1000000-0000-4000-8000-000000000091",
+      "name": "Set Token Type"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "bf5SHDMRH1MiEMfr",
+          "mode": "id"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
       "position": [
         1728,
-        -304
+        -320
       ],
-      "id": "7ccc76d3-062a-427c-b7aa-6fc833ab27c2",
-      "name": "Fetch Email Batch",
-      "webhookId": "ecb89380-9fb9-480f-a9df-49fb1fff8ddf",
-      "credentials": {
-        "microsoftOutlookOAuth2Api": {
-          "id": "jzzDNHXRz5JAGlpl",
-          "name": "Microsoft Outlook account"
+      "id": "b1000000-0000-4000-8000-000000000092",
+      "name": "WF-00b: Get Token"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ }}/mailFolders/inbox/messages?$filter=isRead eq false&$top=9&$orderby=receivedDateTime asc",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('WF-00b: Get Token').first().json.accessToken }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
         }
-      }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        -320
+      ],
+      "id": "b1000000-0000-4000-8000-000000000093",
+      "name": "Fetch Email Batch"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Unwrap Graph API response { value: [...messages] }\nconst response = $input.first().json;\nconst messages = response.value || [];\n\nif (messages.length === 0) {\n  return [];\n}\n\nreturn messages.map(msg => ({ json: msg }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2272,
+        -320
+      ],
+      "id": "b1000000-0000-4000-8000-000000000094",
+      "name": "Extract Messages"
+    },
+    {
+      "parameters": {
+        "batchSize": 3,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2544,
+        -320
+      ],
+      "id": "b1000000-0000-4000-8000-000000000095",
+      "name": "Batch of 3"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://graph.microsoft.com/v1.0/me/messages/{{ $json.id }}/move",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftOutlookOAuth2Api",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ }}/messages/{{ $json.id }}/move",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('WF-00b: Get Token').first().json.accessToken }}"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "{ \"destinationId\": \"AQMkADAwATM3ZmYBLWFjNzktZThjYi0wMAItMDAKAC4AAAPC4Icd5OvFRJyzX6l-fZwFAQBhdL-ANklNR6oMNJhB5iOiAAAB7sV-AAAA\" }",
+        "jsonBody": "{ \"destinationId\": \"AAMkAGFkNDcyN2QxLWRlNjItNDNlNC05OTAxLTI3OTAyZjQxNDkyMwAuAAAAAAD-mcdOUa3OSLpHjBkPvPw4AQANdmeaGmDXS5HQxLaid2iyAAAAWzvZAAA=\" }",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1968,
-        -304
+        2816,
+        -320
       ],
       "id": "b1000000-0000-4000-8000-000000000100",
-      "name": "Move to Processing",
-      "credentials": {
-        "microsoftOutlookOAuth2Api": {
-          "id": "jzzDNHXRz5JAGlpl",
-          "name": "Microsoft Outlook account"
-        }
-      }
+      "name": "Move to Processing"
     },
     {
       "parameters": {
@@ -92,15 +163,52 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2208,
-        -304
+        3056,
+        -320
       ],
       "id": "b1000000-0000-4000-8000-000000000111",
       "name": "Trigger Processing"
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3296,
+        -320
+      ],
+      "id": "b1000000-0000-4000-8000-000000000096",
+      "name": "Wait 3s",
+      "webhookId": "b1000000-0000-4000-8000-000000000097"
     }
   ],
   "connections": {
-    "Poll Every Minute": {
+    "Poll Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Set Token Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Token Type": {
+      "main": [
+        [
+          {
+            "node": "WF-00b: Get Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-00b: Get Token": {
       "main": [
         [
           {
@@ -115,6 +223,29 @@
       "main": [
         [
           {
+            "node": "Extract Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Messages": {
+      "main": [
+        [
+          {
+            "node": "Batch of 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch of 3": {
+      "main": [
+        [],
+        [
+          {
             "node": "Move to Processing",
             "type": "main",
             "index": 0
@@ -127,6 +258,28 @@
         [
           {
             "node": "Trigger Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Processing": {
+      "main": [
+        [
+          {
+            "node": "Wait 3s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 3s": {
+      "main": [
+        [
+          {
+            "node": "Batch of 3",
             "type": "main",
             "index": 0
           }

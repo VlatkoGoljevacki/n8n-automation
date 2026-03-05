@@ -1,5 +1,5 @@
 {
-  "name": "[medika-preorders-test] WF-00b: ERP Token Manager",
+  "name": "[medika-preorders-test] WF-00b: Token Manager",
   "active": false,
   "nodes": [
     {
@@ -9,11 +9,72 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
       "position": [
-        0,
+        144,
         0
       ],
       "id": "f0b00000-0000-4000-8000-000000000001",
       "name": "Sub-Workflow Input"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "f0b-rtr-001",
+                    "leftValue": "={{ $json.tokenType }}",
+                    "rightValue": "graph_api",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "f0b-rtr-002",
+                    "leftValue": "={{ $json.tokenType }}",
+                    "rightValue": "graph_api",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEquals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        384,
+        0
+      ],
+      "id": "f0b00000-0000-4000-8000-000000000011",
+      "name": "Router"
     },
     {
       "parameters": {
@@ -36,6 +97,24 @@
               "name": "erpPassword",
               "value": "={{ $env.MEDIKA_ERP_PASSWORD }}",
               "type": "string"
+            },
+            {
+              "id": "f0b-cfg-004",
+              "name": "tokenType",
+              "value": "medika_erp",
+              "type": "string"
+            },
+            {
+              "id": "f0b-cfg-005",
+              "name": "tokenUrl",
+              "value": "={{ $env.MEDIKA_ERP_URL + '/Token' }}",
+              "type": "string"
+            },
+            {
+              "id": "f0b-cfg-006",
+              "name": "tokenBody",
+              "value": "={{ 'grant_type=password&username=' + encodeURIComponent($env.MEDIKA_ERP_USERNAME) + '&password=' + encodeURIComponent($env.MEDIKA_ERP_PASSWORD) }}",
+              "type": "string"
             }
           ]
         },
@@ -44,28 +123,73 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        240,
-        -200
+        672,
+        -128
       ],
       "id": "f0b00000-0000-4000-8000-000000000010",
-      "name": "Config"
+      "name": "ERP Config"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f0b-gcfg-001",
+              "name": "tokenType",
+              "value": "graph_api",
+              "type": "string"
+            },
+            {
+              "id": "f0b-gcfg-002",
+              "name": "tokenUrl",
+              "value": "={{ 'https://login.microsoftonline.com/' + $env.MS_GRAPH_TENANT_ID + '/oauth2/v2.0/token' }}",
+              "type": "string"
+            },
+            {
+              "id": "f0b-gcfg-003",
+              "name": "tokenBody",
+              "value": "={{ 'grant_type=client_credentials&client_id=' + $env.MS_GRAPH_CLIENT_ID + '&client_secret=' + encodeURIComponent($env.MS_GRAPH_CLIENT_SECRET) + '&scope=https%3A%2F%2Fgraph.microsoft.com%2F.default' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        672,
+        128
+      ],
+      "id": "f0b00000-0000-4000-8000-000000000012",
+      "name": "Graph Config"
     },
     {
       "parameters": {
         "operation": "get",
         "dataTableId": {
           "__rl": true,
-          "value": "LDdPdfhyudDcNRRp",
+          "value": "2OXhQe9PldAX5fYo",
           "mode": "list",
-          "cachedResultName": "ERP Tokens",
-          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/LDdPdfhyudDcNRRp"
+          "cachedResultName": "Tokens"
         },
-        "limit": 10
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "type",
+              "keyValue": "={{ $json.tokenType }}"
+            }
+          ]
+        },
+        "limit": 1,
+        "orderBy": true,
+        "orderByColumn": "storedAt"
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        240,
+        1008,
         0
       ],
       "id": "f0b00000-0000-4000-8000-000000000002",
@@ -74,13 +198,12 @@
     },
     {
       "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "// Check Data Table for a valid cached ERP token\nconst config = $('Config').first().json;\nconst erpApiUrl = config.erpApiUrl;\nconst erpUsername = config.erpUsername;\nconst erpPassword = config.erpPassword;\n\n// Find latest valid token from DT results\nconst dtRows = $('DT: Read Token').all();\nlet latestToken = null;\nlet latestStoredAt = 0;\n\nfor (const row of dtRows) {\n  const r = row.json;\n  if (!r.token || !r.expiresAt) continue;\n\n  const storedAt = r.storedAt ? new Date(r.storedAt).getTime() : 0;\n  if (storedAt > latestStoredAt) {\n    latestStoredAt = storedAt;\n    latestToken = r;\n  }\n}\n\n// Check if latest token is still valid (2-hour buffer)\nif (latestToken) {\n  const bufferMs = 2 * 60 * 60 * 1000;\n  const expiresAt = new Date(latestToken.expiresAt).getTime();\n  if (Date.now() < (expiresAt - bufferMs)) {\n    return [{ json: {\n      needsFetch: false,\n      accessToken: latestToken.token,\n      expiresAt: latestToken.expiresAt\n    }}];\n  }\n}\n\n// Token missing or expired — prepare fetch\nreturn [{ json: {\n  needsFetch: true,\n  tokenUrl: erpApiUrl + '/Token',\n  tokenBody: 'grant_type=password&username=' + encodeURIComponent(erpUsername) + '&password=' + encodeURIComponent(erpPassword)\n}}];\n"
+        "jsCode": "// Check Data Table for a valid cached token\n// DT: Read Token returns at most 1 row filtered by type, sorted by storedAt\nlet config;\ntry { config = $('Graph Config').first().json; } catch(e) { config = $('ERP Config').first().json; }\nconst tokenType = config.tokenType || 'medika_erp';\nconst tokenUrl = config.tokenUrl;\nconst tokenBody = config.tokenBody;\n\nconst dtRows = $('DT: Read Token').all();\nconst latest = dtRows.length > 0 ? dtRows[0].json : null;\n\nif (latest && latest.token && latest.expiresAt) {\n  const bufferMs = 10 * 60 * 1000;\n  const expiresAt = new Date(latest.expiresAt).getTime();\n  if (Date.now() < (expiresAt - bufferMs)) {\n    return [{ json: {\n      needsFetch: false,\n      accessToken: latest.token,\n      expiresAt: latest.expiresAt\n    }}];\n  }\n}\n\nreturn [{ json: {\n  needsFetch: true,\n  tokenType: tokenType,\n  tokenUrl: tokenUrl,\n  tokenBody: tokenBody\n}}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        480,
+        1248,
         0
       ],
       "id": "f0b00000-0000-4000-8000-000000000003",
@@ -112,7 +235,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        720,
+        1488,
         0
       ],
       "id": "f0b00000-0000-4000-8000-000000000004",
@@ -120,13 +243,12 @@
     },
     {
       "parameters": {
-        "mode": "runOnceForAllItems",
         "jsCode": "// Return cached token from Data Table\nconst checked = $input.first().json;\n\nreturn [{ json: {\n  accessToken: checked.accessToken,\n  expiresAt: checked.expiresAt,\n  cacheHit: true\n}}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        960,
+        1728,
         -96
       ],
       "id": "f0b00000-0000-4000-8000-000000000005",
@@ -155,7 +277,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        960,
+        1728,
         208
       ],
       "id": "f0b00000-0000-4000-8000-000000000006",
@@ -163,13 +285,12 @@
     },
     {
       "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "// Parse ERP token response and format for Data Table storage\nconst tokenResponse = $input.first().json;\nconst token = tokenResponse.access_token;\nif (!token) {\n  throw new Error('Failed to get ERP token: ' + JSON.stringify(tokenResponse));\n}\n\nlet expiresAt;\nif (tokenResponse['.expires']) {\n  expiresAt = new Date(tokenResponse['.expires']).toISOString();\n} else if (tokenResponse.expires_in) {\n  expiresAt = new Date(Date.now() + (tokenResponse.expires_in * 1000)).toISOString();\n} else {\n  expiresAt = new Date(Date.now() + (60 * 60 * 1000)).toISOString();\n}\n\nreturn [{ json: {\n  token: token,\n  expiresAt: expiresAt,\n  storedAt: new Date().toISOString(),\n  accessToken: token\n}}];\n"
+        "jsCode": "// Parse token response and format for Data Table storage\nconst tokenResponse = $input.first().json;\nconst tokenType = $('Check Token').first().json.tokenType || 'medika_erp';\nconst token = tokenResponse.access_token;\nif (!token) {\n  throw new Error('Failed to get ' + tokenType + ' token: ' + JSON.stringify(tokenResponse));\n}\n\nlet expiresAt;\nif (tokenResponse['.expires']) {\n  expiresAt = new Date(tokenResponse['.expires']).toISOString();\n} else if (tokenResponse.expires_in) {\n  expiresAt = new Date(Date.now() + (tokenResponse.expires_in * 1000)).toISOString();\n} else {\n  expiresAt = new Date(Date.now() + (60 * 60 * 1000)).toISOString();\n}\n\nreturn [{ json: {\n  tokenType: tokenType,\n  token: token,\n  expiresAt: expiresAt,\n  storedAt: new Date().toISOString(),\n  accessToken: token\n}}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1200,
+        1968,
         208
       ],
       "id": "f0b00000-0000-4000-8000-000000000007",
@@ -177,23 +298,43 @@
     },
     {
       "parameters": {
-        "operation": "insert",
+        "operation": "upsert",
         "dataTableId": {
           "__rl": true,
-          "value": "LDdPdfhyudDcNRRp",
+          "value": "2OXhQe9PldAX5fYo",
           "mode": "list",
-          "cachedResultName": "ERP Tokens",
-          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/LDdPdfhyudDcNRRp"
+          "cachedResultName": "Tokens",
+          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/2OXhQe9PldAX5fYo"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "type",
+              "keyValue": "={{ $json.tokenType }}"
+            }
+          ]
         },
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
+            "type": "={{ $json.tokenType }}",
             "token": "={{ $json.token }}",
             "expiresAt": "={{ $json.expiresAt }}",
             "storedAt": "={{ $json.storedAt }}"
           },
           "matchingColumns": [],
           "schema": [
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
             {
               "id": "token",
               "displayName": "token",
@@ -233,21 +374,20 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        1440,
+        2208,
         208
       ],
       "id": "f0b00000-0000-4000-8000-000000000008",
-      "name": "DT: Save Token"
+      "name": "DT: Upsert Token"
     },
     {
       "parameters": {
-        "mode": "runOnceForAllItems",
         "jsCode": "// Return fresh token after saving to Data Table\nconst parsed = $('Parse Token').first().json;\n\nreturn [{ json: {\n  accessToken: parsed.accessToken,\n  expiresAt: parsed.expiresAt,\n  cacheHit: false\n}}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1680,
+        2448,
         208
       ],
       "id": "f0b00000-0000-4000-8000-000000000009",
@@ -259,14 +399,43 @@
       "main": [
         [
           {
-            "node": "Config",
+            "node": "Router",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Config": {
+    "Router": {
+      "main": [
+        [
+          {
+            "node": "Graph Config",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ERP Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ERP Config": {
+      "main": [
+        [
+          {
+            "node": "DT: Read Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Graph Config": {
       "main": [
         [
           {
@@ -332,14 +501,14 @@
       "main": [
         [
           {
-            "node": "DT: Save Token",
+            "node": "DT: Upsert Token",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "DT: Save Token": {
+    "DT: Upsert Token": {
       "main": [
         [
           {

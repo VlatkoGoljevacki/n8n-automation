@@ -1,0 +1,75 @@
+{
+  "_description": "DataTable schema registry. Create-only — no delete/update from CLI.",
+  "datatables": [
+    {
+      "id": "2OXhQe9PldAX5fYo",
+      "name": "Tokens",
+      "columns": [
+        {
+          "name": "type",
+          "type": "string"
+        },
+        {
+          "name": "token",
+          "type": "string"
+        },
+        {
+          "name": "expiresAt",
+          "type": "string"
+        },
+        {
+          "name": "storedAt",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "IorEZZc62YoIw0PA",
+      "name": "Customers",
+      "columns": [
+        {
+          "name": "deliveryPlaceId",
+          "type": "string"
+        },
+        {
+          "name": "customerId",
+          "type": "string"
+        },
+        {
+          "name": "customerName",
+          "type": "string"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "oib",
+          "type": "string"
+        },
+        {
+          "name": "city",
+          "type": "string"
+        },
+        {
+          "name": "postCode",
+          "type": "string"
+        },
+        {
+          "name": "street",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "TjCsxRaaWDiuJTCi",
+      "name": "leads-vars",
+      "columns": [
+        {
+          "name": "NextPageToken",
+          "type": "string"
+        }
+      ]
+    }
+  ]
+}
