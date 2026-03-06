@@ -11,7 +11,7 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        1520,
+        704,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000200",
@@ -35,7 +35,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1744,
+        928,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000150",
@@ -53,7 +53,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        1952,
+        1136,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000151",
@@ -78,7 +78,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2160,
+        1344,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000152",
@@ -91,7 +91,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2336,
+        1520,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000104",
@@ -163,7 +163,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        2560,
+        1744,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000040",
@@ -181,7 +181,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        2784,
+        1968,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000095",
@@ -229,7 +229,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        3040,
+        2224,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000002",
@@ -237,16 +237,101 @@
     },
     {
       "parameters": {
-        "jsCode": "// Check binary attachments for XLSX/XLS files\nconst binary = $('Fetch Email').first().binary || {};\nconst binaryKeys = Object.keys(binary);\nlet hasXlsx = false;\n\nfor (const key of binaryKeys) {\n  const b = binary[key];\n  const fileName = (b.fileName || '').toLowerCase();\n  const mimeType = (b.mimeType || '').toLowerCase();\n  if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') ||\n      mimeType.includes('spreadsheetml') || mimeType.includes('ms-excel')) {\n    hasXlsx = true;\n    break;\n  }\n}\n\nreturn [{ json: { ...$input.first().json, _hasXlsx: hasXlsx } }];\n"
+        "jsCode": "// Check binary attachments for XLSX/XLS files\nconst binary = $('Fetch Email').first().binary || {};\nconst binaryKeys = Object.keys(binary);\nlet hasXlsx = false;\n\nfor (const key of binaryKeys) {\n  const b = binary[key];\n  const fileName = (b.fileName || '').toLowerCase();\n  const mimeType = (b.mimeType || '').toLowerCase();\n  if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') ||\n      mimeType.includes('spreadsheetml') || mimeType.includes('ms-excel')) {\n    hasXlsx = true;\n    break;\n  }\n}\n\n// Prepare plain-text input for AI classification\nconst emailBody = $('Fetch Email').first().json.body || {};\nconst bodyHtml = emailBody.content || '';\nconst bodyText = bodyHtml.replace(/<[^>]*>/g, '').substring(0, 2000);\nconst subject = $input.first().json.emailSubject || '';\nconst aiClassifyInput = 'Subject: ' + subject + '\\n\\nBody:\\n' + bodyText;\n\nreturn [{ json: { ...$input.first().json, _hasXlsx: hasXlsx, _aiClassifyInput: aiClassifyInput } }];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3280,
+        2464,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000300",
       "name": "Classify Attachment"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-5-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an email classifier for a pharmaceutical company's pre-order mailbox.\nEmails are most often in Croatian but may be in any language — detect the language and interpret accordingly.\n\nDetermine if this email is a NEW pre-order submission or something else\n(complaint, follow-up, inquiry, status request, delivery issue, etc.)\n\nSigns of a valid new pre-order:\n- Contains product lists with quantities\n- Subject mentions ordering keywords (e.g. Croatian: \"prednarudžba\", \"narudžba\"; English: \"preorder\", \"order\")\n- Straightforward order submission tone\n\nSigns of a NON-order:\n- Complaints about undelivered items (e.g. \"neisporučeni\", \"undelivered\")\n- References to a previous order (e.g. \"ponavljam\", \"sent earlier\")\n- Requests for free/gratis items delivery\n- Status inquiries or general questions\n- Forwarded correspondence about existing orders\n\nReturn ONLY raw JSON, no markdown: {\"isOrder\": true/false, \"reason\": \"brief reason\"}"
+            },
+            {
+              "content": "={{ $json._aiClassifyInput }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 1024
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        2656,
+        -96
+      ],
+      "id": "b1000000-0000-4000-8000-000000000310",
+      "name": "AI: Classify Email",
+      "credentials": {
+        "openAiApi": {
+          "id": "eD10IPhcxdI4yu0p",
+          "name": "OpenAi account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst upstream = $('Classify Attachment').first().json;\n\nlet aiText = '';\ntry {\n  aiText = (typeof data.text === 'string' && data.text)\n    || (data.output && data.output.find(o => o.type === 'message')?.content?.[0]?.text)\n    || (data.output && data.output[0]?.content?.[0]?.text)\n    || '';\n} catch (e) {\n  // On AI failure, default to treating as valid order (fail open)\n  return [{ json: { ...upstream, _isValidOrder: true, _classificationReason: 'AI parse error: ' + e.message } }];\n}\n\nlet jsonStr = aiText.trim();\nif (jsonStr.startsWith('```')) {\n  jsonStr = jsonStr.replace(/^```(?:json)?\\n?/, '').replace(/\\n?```$/, '');\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(jsonStr);\n} catch (e) {\n  // JSON parse failure — fail open\n  return [{ json: { ...upstream, _isValidOrder: true, _classificationReason: 'JSON parse error' } }];\n}\n\nreturn [{\n  json: {\n    ...upstream,\n    _isValidOrder: parsed.isOrder !== false,  // fail open: only block if explicitly false\n    _classificationReason: parsed.reason || ''\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2992,
+        -96
+      ],
+      "id": "b1000000-0000-4000-8000-000000000311",
+      "name": "Parse Classification"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "d1000310-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json._isValidOrder }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3248,
+        -96
+      ],
+      "id": "b1000000-0000-4000-8000-000000000312",
+      "name": "Is Valid Order?"
     },
     {
       "parameters": {
@@ -275,7 +360,7 @@
       "typeVersion": 2,
       "position": [
         3488,
-        -96
+        -208
       ],
       "id": "b1000000-0000-4000-8000-000000000301",
       "name": "Has XLSX?"
@@ -384,6 +469,14 @@
           "mode": "id",
           "value": "APAr3L9iv7n8HkLl"
         },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
         "options": {}
       },
       "type": "n8n-nodes-base.executeWorkflow",
@@ -430,7 +523,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build warning/error notification email for admin\n// Includes full original email body and forwards attachments\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\nconst emailBody = $('Fetch Email').first().json.body || {};\nconst originalHtml = emailBody.content || '';\n\n// Detect which error branch via the common upstream Classify Attachment node\nconst isXlsxPath = $('Classify Attachment').first().json._hasXlsx === true;\n\nlet title, description, errorType;\nif (isXlsxPath) {\n  errorType = 'xlsx_parse_failed';\n  title = 'XLSX Parse Failed';\n  description = 'An XLSX attachment was found but could not be parsed into order data. '\n    + 'Either the file is corrupted, password-protected, or in an unexpected format, '\n    + 'or the email does not contain an actual order.';\n} else {\n  errorType = 'no_order_data';\n  title = 'No Order Data Found';\n  description = 'No XLSX attachment was found and no order data could be extracted from the email body.';\n}\n\nconst html = '<div style=\"font-family: Arial, sans-serif; max-width: 600px;\">'\n  + '<h2 style=\"color: #d35400;\">' + title + '</h2>'\n  + '<p>' + description + '</p>'\n  + '<table style=\"border-collapse: collapse; width: 100%; margin: 16px 0;\">'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">From</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + emailMeta.senderEmail + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">Subject</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + emailMeta.emailSubject + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">Received</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + emailMeta.receivedAt + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">Error Type</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + errorType + '</td></tr>'\n  + '</table>'\n  + '<h3>Original Email:</h3>'\n  + '<div style=\"background: #f9f9f9; padding: 12px; border-left: 3px solid #d35400;\">'\n  + originalHtml\n  + '</div>'\n  + '<p style=\"color: #888; margin-top: 16px;\">The email has been moved to the Error folder. Please review manually.</p>'\n  + '</div>';\n\n// Encode attachments into JSON (binary gets dropped by downstream Set/Execute nodes)\nconst binary = $('Fetch Email').first().binary || {};\nconst attachments = [];\nfor (const key of Object.keys(binary)) {\n  const b = binary[key];\n  if (b.data) {\n    attachments.push({\n      '@odata.type': '#microsoft.graph.fileAttachment',\n      name: b.fileName || key,\n      contentType: b.mimeType || 'application/octet-stream',\n      contentBytes: b.data\n    });\n  }\n}\n\n// Build complete sendMail payload\nconst subject = '[Medika Pre-Orders] ' + title + ' - ' + emailMeta.emailSubject;\nconst message = {\n  subject,\n  body: { contentType: 'HTML', content: html },\n  toRecipients: [{ emailAddress: { address: config.notifyEmail } }]\n};\nif (attachments.length > 0) {\n  message.attachments = attachments;\n}\n\nreturn [{\n  json: {\n    sendMailPayload: { message },\n    errorType: errorType,\n    moveToError: true\n  }\n}];\n"
+        "jsCode": "// Build warning/error notification email for admin\n// Includes full original email body and forwards attachments\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\nconst emailBody = $('Fetch Email').first().json.body || {};\nconst originalHtml = emailBody.content || '';\n\n// Detect which error branch\nconst inputData = $input.first().json;\nconst isAiNonOrder = inputData._isValidOrder === false;\nconst isXlsxPath = $('Classify Attachment').first().json._hasXlsx === true;\n\nlet title, description, errorType;\nif (isAiNonOrder) {\n  errorType = 'not_an_order';\n  title = 'Email Classified as Non-Order';\n  description = 'The AI classifier determined this email is not a new pre-order. '\n    + 'Reason: ' + (inputData._classificationReason || 'N/A') + '. '\n    + 'Please review the original email below and process manually if needed.';\n} else if (isXlsxPath) {\n  errorType = 'xlsx_parse_failed';\n  title = 'XLSX Parse Failed';\n  description = 'An XLSX attachment was found but could not be parsed into order data. '\n    + 'Either the file is corrupted, password-protected, or in an unexpected format, '\n    + 'or the email does not contain an actual order.';\n} else {\n  errorType = 'no_order_data';\n  title = 'No Order Data Found';\n  description = 'No XLSX attachment was found and no order data could be extracted from the email body.';\n}\n\nconst html = '<div style=\"font-family: Arial, sans-serif; max-width: 600px;\">'\n  + '<h2 style=\"color: #d35400;\">' + title + '</h2>'\n  + '<p>' + description + '</p>'\n  + '<table style=\"border-collapse: collapse; width: 100%; margin: 16px 0;\">'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">From</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + emailMeta.senderEmail + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">Subject</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + emailMeta.emailSubject + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">Received</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + emailMeta.receivedAt + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">Error Type</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + errorType + '</td></tr>'\n  + '</table>'\n  + '<h3>Original Email:</h3>'\n  + '<div style=\"background: #f9f9f9; padding: 12px; border-left: 3px solid #d35400;\">'\n  + originalHtml\n  + '</div>'\n  + '<p style=\"color: #888; margin-top: 16px;\">The email has been moved to the Error folder. Please review manually.</p>'\n  + '</div>';\n\n// Encode attachments into JSON (binary gets dropped by downstream Set/Execute nodes)\nconst binary = $('Fetch Email').first().binary || {};\nconst attachments = [];\nfor (const key of Object.keys(binary)) {\n  const b = binary[key];\n  if (b.data) {\n    attachments.push({\n      '@odata.type': '#microsoft.graph.fileAttachment',\n      name: b.fileName || key,\n      contentType: b.mimeType || 'application/octet-stream',\n      contentBytes: b.data\n    });\n  }\n}\n\n// Build complete sendMail payload\nconst subject = '[Medika Pre-Orders] ' + title + ' - ' + emailMeta.emailSubject;\nconst message = {\n  subject,\n  body: { contentType: 'HTML', content: html },\n  toRecipients: [{ emailAddress: { address: config.notifyEmail } }]\n};\nif (attachments.length > 0) {\n  message.attachments = attachments;\n}\n\nreturn [{\n  json: {\n    sendMailPayload: { message },\n    errorType: errorType,\n    moveToError: true\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -710,7 +803,47 @@
       "main": [
         [
           {
+            "node": "AI: Classify Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Classify Email": {
+      "main": [
+        [
+          {
+            "node": "Parse Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Classification": {
+      "main": [
+        [
+          {
+            "node": "Is Valid Order?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Valid Order?": {
+      "main": [
+        [
+          {
             "node": "Has XLSX?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Warning Email",
             "type": "main",
             "index": 0
           }

@@ -26,6 +26,7 @@
         "responses": {
           "values": [
             {
+              "role": "system",
               "content": "You are an expert data extraction assistant for Croatian pharmaceutical pre-orders.\n\nAnalyze the email body HTML below and extract any order data you find.\n\nLook for:\n- Drug/product codes (šifra proizvoda, šifra artikla) — typically numeric strings like \"3001234\"\n- Article/product names (naziv, artikl, proizvod)\n- Quantities (količina, kom, qty)\n- Pharmacy identifiers (šifra primatelja, šifra ljekarne) — 10-digit strings starting with \"7700\"\n- Pharmacy names (naziv ljekarne)\n- Units (jedinica, jm) — default \"kom\"\n- Discount percentages (rabat, popust)\n- Notes/comments (napomena)\n\nThe email may contain:\n- HTML tables with order data\n- Plain text lists of products and quantities\n- Mixed content with order info embedded in prose\n- Croatian language content\n\nReturn ONLY a raw JSON array. No markdown fences, no explanation, no extra text.\n\nEach element must have this schema:\n{\"drugCode\": \"string or null\", \"articleName\": \"string or null\", \"quantity\": number, \"unit\": \"string\", \"pharmacyId\": \"string or null\", \"pharmacyName\": \"string or null\", \"discount\": number, \"notes\": \"string\"}\n\nField details:\n- drugCode: product code string or null\n- articleName: product name string or null\n- quantity: exact number from the email. If quantity is not specified, default to 1\n- unit: default \"kom\"\n- pharmacyId: 10-digit string starting with \"7700\" or null\n- pharmacyName: pharmacy name string or null\n- discount: percentage number (convert decimals: 0.12 → 12). Default 0\n- notes: default \"\"\n\nRules:\n- Extract ALL order lines you find\n- Only extract actual order data — not signatures, disclaimers, or forwarded headers\n- Skip totals/summary rows (UKUPNO, TOTAL)\n- If the email contains NO order data at all, return an empty array: []\n- Preserve exact quantities — never guess or infer numbers"
             },
             {
@@ -33,6 +34,7 @@
             }
           ]
         },
+        "builtInTools": {},
         "options": {
           "maxTokens": 16384
         }
@@ -108,6 +110,7 @@
         "responses": {
           "values": [
             {
+              "role": "system",
               "content": "={{ $json.verifyPrompt }}"
             },
             {
@@ -115,6 +118,7 @@
             }
           ]
         },
+        "builtInTools": {},
         "options": {
           "maxTokens": 16384
         }
@@ -123,7 +127,7 @@
       "typeVersion": 2.1,
       "position": [
         1120,
-        -100
+        -96
       ],
       "id": "f8000000-0000-4000-8000-000000000004",
       "name": "LLM: Verify Extraction",
@@ -142,7 +146,7 @@
       "typeVersion": 2,
       "position": [
         1440,
-        -100
+        -96
       ],
       "id": "f8000000-0000-4000-8000-000000000005",
       "name": "Parse Verified Response"
@@ -153,7 +157,7 @@
       "typeVersion": 1,
       "position": [
         1120,
-        100
+        112
       ],
       "id": "f8000000-0000-4000-8000-000000000007",
       "name": "No Order Data"

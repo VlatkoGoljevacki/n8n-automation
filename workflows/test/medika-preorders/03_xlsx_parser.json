@@ -103,6 +103,7 @@
               "fileId": "={{ $('Upload XLSX to OpenAI').first().json.id }}"
             },
             {
+              "role": "system",
               "content": "You are an expert data extraction assistant for Croatian pharmacy pre-orders.\n\nUse Python (pandas and openpyxl) to read the uploaded XLSX file and extract all order lines.\n\nInstructions:\n1. Read ALL sheets in the workbook\n2. Detect header rows by content (look for: šifra, artikl, naziv, količina, qty, kom, rabat, kupac, ljekarna, jm, kol, naručeno)\n3. Handle merged cells — unmerge and forward-fill values\n4. Extract every row that contains a product code (drugCode) or article name\n\nReturn ONLY a raw JSON array. No markdown fences, no explanation, no extra text.\n\nEach element must have this schema:\n{\"drugCode\": \"string or null\", \"articleName\": \"string or null\", \"quantity\": number, \"unit\": \"string\", \"pharmacyId\": \"string or null\", \"pharmacyName\": \"string or null\", \"discount\": number, \"notes\": \"string\", \"sourceSheet\": \"string\"}\n\nField details:\n- drugCode: product code string (e.g. \"3001234\" regular, \"9301234\" gratis) or null\n- articleName: product name string or null\n- quantity: exact number from quantity column. If the quantity cell is empty/blank, default to 1 — the product's presence in the sheet means it was ordered\n- unit: default \"kom\"\n- pharmacyId: 10-digit string starting with \"7700\" or null\n- pharmacyName: pharmacy name string or null\n- discount: percentage number (convert decimals: 0.12 → 12). Default 0\n- notes: default \"\"\n- sourceSheet: the sheet name this line came from\n\nRules:\n- Extract ALL order lines from ALL sheets\n- Pharmacy info may appear in metadata rows above the table — apply to all lines in that section\n- Multiple sections (REDOVNE ŠIFRE, GRATIS ŠIFRE) or pharmacies may appear — extract all\n- GRT prefix = gratis item, extract normally\n- Skip: empty rows, section labels, column header rows\n- SKIP TOTALS: Rows labeled TOTAL, UKUPNO, or summary rows with aggregated numbers are NOT order lines. Never treat a totals row as a pharmacy or order.\n- Preserve exact quantities from source — never guess or sum across sheets\n- DEDUPLICATION: Multiple sheets may contain the SAME data in different layouts (e.g. a pivot table and a flat table). After extracting, deduplicate by (pharmacyId + drugCode) — if the same combination appears from multiple sheets, keep only one copy.\n- HALLUCINATION CHECK: Only output pharmacyIds and drugCodes that literally appear as cell values in the file. Never infer or compute IDs."
             }
           ]
@@ -145,6 +146,7 @@
               "fileId": "={{ $('Upload XLSX to OpenAI').first().json.id }}"
             },
             {
+              "role": "system",
               "content": "={{ $json.verifyPrompt }}"
             }
           ]
