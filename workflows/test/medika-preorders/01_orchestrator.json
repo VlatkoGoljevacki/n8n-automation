@@ -7,8 +7,7 @@
         "rule": {
           "interval": [
             {
-              "field": "minutes",
-              "minutesInterval": 5
+              "field": "minutes"
             }
           ]
         }
@@ -73,7 +72,7 @@
     },
     {
       "parameters": {
-        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ }}/mailFolders/inbox/messages?$filter=isRead eq false&$top=9&$orderby=receivedDateTime asc",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ }}/mailFolders/inbox/messages?$filter=isRead eq false&$top=1&$orderby=receivedDateTime asc",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -94,11 +93,11 @@
         -320
       ],
       "id": "b1000000-0000-4000-8000-000000000093",
-      "name": "Fetch Email Batch"
+      "name": "Fetch Email Batch",
+      "webhookId": "ecb89380-9fb9-480f-a9df-49fb1fff8ddf"
     },
     {
       "parameters": {
-        "mode": "runOnceForAllItems",
         "jsCode": "// Unwrap Graph API response { value: [...messages] }\nconst response = $input.first().json;\nconst messages = response.value || [];\n\nif (messages.length === 0) {\n  return [];\n}\n\nreturn messages.map(msg => ({ json: msg }));\n"
       },
       "type": "n8n-nodes-base.code",
@@ -118,7 +117,7 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        2544,
+        2560,
         -320
       ],
       "id": "b1000000-0000-4000-8000-000000000095",
@@ -145,7 +144,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2816,
+        2848,
         -320
       ],
       "id": "b1000000-0000-4000-8000-000000000100",
@@ -163,7 +162,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3056,
+        3088,
         -320
       ],
       "id": "b1000000-0000-4000-8000-000000000111",
@@ -171,13 +170,12 @@
     },
     {
       "parameters": {
-        "amount": 3,
-        "unit": "seconds"
+        "amount": 3
       },
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        3296,
+        3312,
         -320
       ],
       "id": "b1000000-0000-4000-8000-000000000096",

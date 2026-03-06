@@ -1,0 +1,775 @@
+{
+  "name": "[medika-preorders-test] WF-09: Process Order",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        400,
+        200
+      ],
+      "id": "c9000000-0000-4000-8000-000000000001",
+      "name": "Sub-Workflow Input"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Output one item per unique delivery place ID for individual DT lookups\nconst input = $input.first().json;\nconst orderLines = input.orderLines || [];\nconst accessToken = input.accessToken;\n\nconst ids = [...new Set(orderLines.map(l => l.pharmacyId).filter(Boolean))];\n\n// Output one item per delivery place ID\nreturn ids.map(id => ({ json: { deliveryPlaceId: id, accessToken, parseResult: input } }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        200
+      ],
+      "id": "c9000000-0000-4000-8000-000000000080",
+      "name": "Extract Order Delivery IDs"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "N4zPWowOH9YJTPUI",
+          "mode": "list",
+          "cachedResultName": "Customers",
+          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/N4zPWowOH9YJTPUI"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "deliveryPlaceId",
+              "keyValue": "={{ $json.deliveryPlaceId }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        200
+      ],
+      "id": "c9000000-0000-4000-8000-000000000081",
+      "name": "DT: Lookup Delivery Places",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate per-ID DT lookup results into a single customer lookup\nconst firstItem = $('Extract Order Delivery IDs').first().json;\nconst parseResult = firstItem.parseResult;\nconst accessToken = firstItem.accessToken;\n\n// Collect all requested delivery place IDs\nconst requestedItems = $('Extract Order Delivery IDs').all();\nconst requestedIds = requestedItems.map(i => i.json.deliveryPlaceId);\n\n// Build lookup from DT results (one result per requested ID)\nconst dtRows = $('DT: Lookup Delivery Places').all();\nconst deliveryPlaceById = {};\nconst customerById = {};\n\nfor (const row of dtRows) {\n  const r = row.json;\n  if (r.deliveryPlaceId) {\n    deliveryPlaceById[r.deliveryPlaceId] = {\n      customerId: r.customerId,\n      customerName: r.customerName,\n      name: r.name,\n      city: r.city,\n      postCode: r.postCode,\n      street: r.street\n    };\n    if (r.customerId && !customerById[r.customerId]) {\n      customerById[r.customerId] = {\n        name: r.customerName,\n        oib: r.oib,\n        city: r.city,\n        postCode: r.postCode,\n        street: r.street\n      };\n    }\n  }\n}\n\nconst missingIds = requestedIds.filter(id => !deliveryPlaceById[id]);\n\nreturn [{\n  json: {\n    ...parseResult,\n    accessToken,\n    customerLookup: {\n      customerById,\n      deliveryPlaceById,\n      totalCustomers: Object.keys(customerById).length,\n      totalDeliveryPlaces: Object.keys(deliveryPlaceById).length,\n      source: 'datatable'\n    },\n    missingDeliveryPlaceIds: missingIds,\n    hasMissing: missingIds.length > 0\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        200
+      ],
+      "id": "c9000000-0000-4000-8000-000000000082",
+      "name": "Build Customer Lookup"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c9000080-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.hasMissing }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        200
+      ],
+      "id": "c9000000-0000-4000-8000-000000000083",
+      "name": "Has Missing?"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "AuxPo8thYeUbZcCl"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1600,
+        0
+      ],
+      "id": "c9000000-0000-4000-8000-000000000084",
+      "name": "WF-07: Refresh Customers",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Discard WF-07 output, re-emit original order delivery place IDs\nreturn $('Extract Order Delivery IDs').all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        0
+      ],
+      "id": "c9000000-0000-4000-8000-000000000087",
+      "name": "Restore Order IDs"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "N4zPWowOH9YJTPUI",
+          "mode": "list",
+          "cachedResultName": "Customers",
+          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/N4zPWowOH9YJTPUI"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "deliveryPlaceId",
+              "keyValue": "={{ $json.deliveryPlaceId }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2080,
+        0
+      ],
+      "id": "c9000000-0000-4000-8000-000000000085",
+      "name": "Re-lookup Delivery Places",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Rebuild lookup after WF-07 refresh\nconst firstItem = $('Extract Order Delivery IDs').first().json;\nconst parseResult = firstItem.parseResult;\nconst accessToken = firstItem.accessToken;\n\nconst requestedItems = $('Extract Order Delivery IDs').all();\nconst requestedIds = requestedItems.map(i => i.json.deliveryPlaceId);\n\nconst dtRows = $('Re-lookup Delivery Places').all();\nconst deliveryPlaceById = {};\nconst customerById = {};\n\nfor (const row of dtRows) {\n  const r = row.json;\n  if (r.deliveryPlaceId) {\n    deliveryPlaceById[r.deliveryPlaceId] = {\n      customerId: r.customerId,\n      customerName: r.customerName,\n      name: r.name,\n      city: r.city,\n      postCode: r.postCode,\n      street: r.street\n    };\n    if (r.customerId && !customerById[r.customerId]) {\n      customerById[r.customerId] = {\n        name: r.customerName,\n        oib: r.oib,\n        city: r.city,\n        postCode: r.postCode,\n        street: r.street\n      };\n    }\n  }\n}\n\nconst missingIds = requestedIds.filter(id => !deliveryPlaceById[id]);\nif (missingIds.length > 0) {\n  console.log('Still missing after refresh: ' + missingIds.join(', '));\n}\n\nreturn [{\n  json: {\n    ...parseResult,\n    accessToken,\n    customerLookup: {\n      customerById,\n      deliveryPlaceById,\n      totalCustomers: Object.keys(customerById).length,\n      totalDeliveryPlaces: Object.keys(deliveryPlaceById).length,\n      source: 'datatable_refreshed'\n    },\n    missingDeliveryPlaceIds: missingIds,\n    hasMissing: missingIds.length > 0\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2320,
+        0
+      ],
+      "id": "c9000000-0000-4000-8000-000000000086",
+      "name": "Rebuild Customer Lookup"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c9000080-0000-4000-8000-000000000002",
+              "leftValue": "={{ $json.hasMissing }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2560,
+        0
+      ],
+      "id": "c9000000-0000-4000-8000-000000000088",
+      "name": "All Found After Refresh?"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2800,
+        -100
+      ],
+      "id": "c9000000-0000-4000-8000-000000000089",
+      "name": "Customer Lookup Failed"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare input for data validation with customer lookup from DataTable\nconst lookupResult = $input.first().json;\nconst subInput = $('Sub-Workflow Input').first().json;\nconst config = subInput.config;\n\nreturn [{\n  json: {\n    config: config,\n    orderLines: lookupResult.orderLines || [],\n    lineCount: lookupResult.lineCount || 0,\n    senderEmail: subInput.senderEmail,\n    emailSubject: subInput.emailSubject,\n    defaultDiscountPerc: config.defaultDiscountPerc,\n    customerLookup: lookupResult.customerLookup\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        200
+      ],
+      "id": "c9000000-0000-4000-8000-000000000023",
+      "name": "Prepare Validator Input"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "t5cBAC0dSAEHIqsZ"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3040,
+        200
+      ],
+      "id": "c9000000-0000-4000-8000-000000000024",
+      "name": "WF-04: Validate Data",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const validationResult = $input.first().json;\nconst subInput = $('Sub-Workflow Input').first().json;\nconst config = subInput.config;\n\nconst cleanedLines = (validationResult.validatedLines || []).map(line => {\n  const { rawData, ...rest } = line;\n  return rest;\n});\n\nreturn [{\n  json: {\n    config: config,\n    validated: validationResult.validated,\n    lineCount: validationResult.lineCount,\n    summary: validationResult.summary,\n    validatedLines: cleanedLines,\n    invalidLines: (validationResult.invalidLines || []).map(line => {\n      const { rawData, ...rest } = line;\n      return rest;\n    }),\n    senderEmail: subInput.senderEmail,\n    emailSubject: subInput.emailSubject,\n    emailId: subInput.emailId,\n    receivedAt: subInput.receivedAt,\n    businessCenter: config.businessCenterDefault\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3280,
+        200
+      ],
+      "id": "c9000000-0000-4000-8000-000000000032",
+      "name": "Prepare Submission Input"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "IVVPye7Jd4O0AFZ4"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3520,
+        200
+      ],
+      "id": "c9000000-0000-4000-8000-000000000028",
+      "name": "WF-06: Submit Order",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const submissionResult = $input.first().json;\nconst submissionInput = $('Prepare Submission Input').first().json;\nconst subInput = $('Sub-Workflow Input').first().json;\nconst config = subInput.config;\n\nconst emailBody = subInput.emailBody || {};\n\nconst binary = $('Sub-Workflow Input').first().binary || {};\nconst binaryKeys = Object.keys(binary);\nconst attachmentBinary = {};\nif (binaryKeys.length > 0) {\n  attachmentBinary.data = binary[binaryKeys[0]];\n}\n\nreturn [{\n  json: {\n    config: config,\n    submissionResult: submissionResult,\n    validatedLines: submissionInput.validatedLines,\n    invalidLines: submissionInput.invalidLines,\n    summary: submissionInput.summary,\n    lineCount: submissionInput.lineCount,\n    senderEmail: subInput.senderEmail,\n    emailSubject: subInput.emailSubject,\n    emailId: subInput.emailId,\n    receivedAt: subInput.receivedAt,\n    businessCenter: submissionInput.businessCenter,\n    emailBodyHtml: subInput.emailBodyHtml || ''\n  },\n  binary: attachmentBinary\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3760,
+        200
+      ],
+      "id": "c9000000-0000-4000-8000-000000000033",
+      "name": "Prepare Notification Input"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "jHyOriThOcIbTBBw"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        4000,
+        200
+      ],
+      "id": "c9000000-0000-4000-8000-000000000026",
+      "name": "WF-05: Send Order Notification",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c9-stf-001",
+              "name": "tokenType",
+              "value": "graph_api",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4240,
+        200
+      ],
+      "id": "c9000000-0000-4000-8000-000000000160",
+      "name": "Set Token (Final)"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "bf5SHDMRH1MiEMfr"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        4480,
+        200
+      ],
+      "id": "c9000000-0000-4000-8000-000000000151",
+      "name": "WF-00b: Get Graph Token"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ }}/messages/{{ $('Sub-Workflow Input').first().json.emailId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('WF-00b: Get Graph Token').first().json.accessToken }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"isRead\": true }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4720,
+        200
+      ],
+      "id": "c9000000-0000-4000-8000-000000000070",
+      "name": "Mark as Read",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ }}/messages/{{ $('Sub-Workflow Input').first().json.emailId }}/move",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('WF-00b: Get Graph Token').first().json.accessToken }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"destinationId\": \"AAMkAGFkNDcyN2QxLWRlNjItNDNlNC05OTAxLTI3OTAyZjQxNDkyMwAuAAAAAAD-mcdOUa3OSLpHjBkPvPw4AQANdmeaGmDXS5HQxLaid2iyAAAAWzvaAAA=\" }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4960,
+        200
+      ],
+      "id": "c9000000-0000-4000-8000-000000000071",
+      "name": "Move to Processed"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c9-ste-001",
+              "name": "tokenType",
+              "value": "graph_api",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3040,
+        -100
+      ],
+      "id": "c9000000-0000-4000-8000-000000000163",
+      "name": "Set Token (Error)"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "bf5SHDMRH1MiEMfr"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3280,
+        -100
+      ],
+      "id": "c9000000-0000-4000-8000-000000000164",
+      "name": "WF-00b: Refresh Token (Error)"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ }}/messages/{{ $('Sub-Workflow Input').first().json.emailId }}/move",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('WF-00b: Refresh Token (Error)').first().json.accessToken }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"destinationId\": \"AAMkAGFkNDcyN2QxLWRlNjItNDNlNC05OTAxLTI3OTAyZjQxNDkyMwAuAAAAAAD-mcdOUa3OSLpHjBkPvPw4AQANdmeaGmDXS5HQxLaid2iyAAAAWzvbAAA=\" }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3520,
+        -100
+      ],
+      "id": "c9000000-0000-4000-8000-000000000072",
+      "name": "Move to Error"
+    }
+  ],
+  "connections": {
+    "Sub-Workflow Input": {
+      "main": [
+        [
+          {
+            "node": "Extract Order Delivery IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Order Delivery IDs": {
+      "main": [
+        [
+          {
+            "node": "DT: Lookup Delivery Places",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DT: Lookup Delivery Places": {
+      "main": [
+        [
+          {
+            "node": "Build Customer Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Customer Lookup": {
+      "main": [
+        [
+          {
+            "node": "Has Missing?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Missing?": {
+      "main": [
+        [
+          {
+            "node": "WF-07: Refresh Customers",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Validator Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-07: Refresh Customers": {
+      "main": [
+        [
+          {
+            "node": "Restore Order IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Order IDs": {
+      "main": [
+        [
+          {
+            "node": "Re-lookup Delivery Places",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Re-lookup Delivery Places": {
+      "main": [
+        [
+          {
+            "node": "Rebuild Customer Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rebuild Customer Lookup": {
+      "main": [
+        [
+          {
+            "node": "All Found After Refresh?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "All Found After Refresh?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Validator Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Customer Lookup Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Customer Lookup Failed": {
+      "main": [
+        [
+          {
+            "node": "Set Token (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Token (Error)": {
+      "main": [
+        [
+          {
+            "node": "WF-00b: Refresh Token (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-00b: Refresh Token (Error)": {
+      "main": [
+        [
+          {
+            "node": "Move to Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Validator Input": {
+      "main": [
+        [
+          {
+            "node": "WF-04: Validate Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-04: Validate Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare Submission Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Submission Input": {
+      "main": [
+        [
+          {
+            "node": "WF-06: Submit Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-06: Submit Order": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notification Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Notification Input": {
+      "main": [
+        [
+          {
+            "node": "WF-05: Send Order Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-05: Send Order Notification": {
+      "main": [
+        [
+          {
+            "node": "Set Token (Final)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Token (Final)": {
+      "main": [
+        [
+          {
+            "node": "WF-00b: Get Graph Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-00b: Get Graph Token": {
+      "main": [
+        [
+          {
+            "node": "Mark as Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark as Read": {
+      "main": [
+        [
+          {
+            "node": "Move to Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": []
+}
