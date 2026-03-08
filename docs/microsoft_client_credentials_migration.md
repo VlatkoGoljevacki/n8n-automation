@@ -114,7 +114,7 @@ Body: {
 |---|---|---|
 | WF-01 Orchestrator | Fetch Email Batch (Outlook node), Move to Processing (already HTTP) | Replace Outlook node with HTTP Request |
 | WF-01b Process Email | Fetch Email (Outlook node for attachments) | Replace with HTTP Request + attachment download |
-| WF-05 Approval Gate | Send Order Notification Email (Outlook node) | Replace with HTTP Request to `/sendMail` |
+| WF-05 Send Order Notification | Send Order Notification Email (Outlook node) | Replace with HTTP Request to `/sendMail` |
 | WF-01b Process Email | Send Warning Email (Outlook node) | Replace with HTTP Request to `/sendMail` |
 
 ### Rate limits (app-only vs delegated)

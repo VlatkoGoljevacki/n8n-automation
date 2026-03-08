@@ -9,8 +9,8 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
       "position": [
-        400,
-        200
+        176,
+        208
       ],
       "id": "c9000000-0000-4000-8000-000000000001",
       "name": "Sub-Workflow Input"
@@ -22,21 +22,77 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        640,
-        200
+        416,
+        208
       ],
       "id": "c9000000-0000-4000-8000-000000000080",
-      "name": "Extract Order Delivery IDs"
+      "name": "Extract Order Delivery IDs",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c9000080-0000-4000-8000-000000000010",
+              "leftValue": "={{ $json.deliveryPlaceId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        640,
+        208
+      ],
+      "id": "c9000000-0000-4000-8000-000000000090",
+      "name": "Has Pharmacy IDs?"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c9-senp-001",
+              "name": "error",
+              "value": "No pharmacy IDs found in order lines — cannot look up customers",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        -96
+      ],
+      "id": "c9000000-0000-4000-8000-000000000091",
+      "name": "Set Error: No Pharmacy IDs"
     },
     {
       "parameters": {
         "operation": "get",
         "dataTableId": {
           "__rl": true,
-          "value": "N4zPWowOH9YJTPUI",
+          "value": "%%DT_CUSTOMERS_ID%%",
           "mode": "list",
           "cachedResultName": "Customers",
-          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/N4zPWowOH9YJTPUI"
+          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/%%DT_CUSTOMERS_ID%%"
         },
         "matchType": "allConditions",
         "filters": {
@@ -53,7 +109,7 @@
       "typeVersion": 1.1,
       "position": [
         880,
-        200
+        208
       ],
       "id": "c9000000-0000-4000-8000-000000000081",
       "name": "DT: Lookup Delivery Places",
@@ -67,7 +123,7 @@
       "typeVersion": 2,
       "position": [
         1120,
-        200
+        208
       ],
       "id": "c9000000-0000-4000-8000-000000000082",
       "name": "Build Customer Lookup"
@@ -99,7 +155,7 @@
       "typeVersion": 2,
       "position": [
         1360,
-        200
+        208
       ],
       "id": "c9000000-0000-4000-8000-000000000083",
       "name": "Has Missing?"
@@ -109,7 +165,7 @@
         "workflowId": {
           "__rl": true,
           "mode": "id",
-          "value": "AuxPo8thYeUbZcCl"
+          "value": "LDlcrPL0B93V7FS0"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
@@ -149,10 +205,10 @@
         "operation": "get",
         "dataTableId": {
           "__rl": true,
-          "value": "N4zPWowOH9YJTPUI",
+          "value": "%%DT_CUSTOMERS_ID%%",
           "mode": "list",
           "cachedResultName": "Customers",
-          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/N4zPWowOH9YJTPUI"
+          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/%%DT_CUSTOMERS_ID%%"
         },
         "matchType": "allConditions",
         "filters": {
@@ -190,56 +246,13 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "c9000080-0000-4000-8000-000000000002",
-              "leftValue": "={{ $json.hasMissing }}",
-              "rightValue": false,
-              "operator": {
-                "type": "boolean",
-                "operation": "false"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        2560,
-        0
-      ],
-      "id": "c9000000-0000-4000-8000-000000000088",
-      "name": "All Found After Refresh?"
-    },
-    {
-      "parameters": {},
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [
-        2800,
-        -100
-      ],
-      "id": "c9000000-0000-4000-8000-000000000089",
-      "name": "Customer Lookup Failed"
-    },
-    {
-      "parameters": {
         "jsCode": "// Prepare input for data validation with customer lookup from DataTable\nconst lookupResult = $input.first().json;\nconst subInput = $('Sub-Workflow Input').first().json;\nconst config = subInput.config;\n\nreturn [{\n  json: {\n    config: config,\n    orderLines: lookupResult.orderLines || [],\n    lineCount: lookupResult.lineCount || 0,\n    senderEmail: subInput.senderEmail,\n    emailSubject: subInput.emailSubject,\n    defaultDiscountPerc: config.defaultDiscountPerc,\n    customerLookup: lookupResult.customerLookup\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         2800,
-        200
+        208
       ],
       "id": "c9000000-0000-4000-8000-000000000023",
       "name": "Prepare Validator Input"
@@ -249,7 +262,7 @@
         "workflowId": {
           "__rl": true,
           "mode": "id",
-          "value": "t5cBAC0dSAEHIqsZ"
+          "value": "QQJbJrVywH0Amm5o"
         },
         "options": {}
       },
@@ -257,7 +270,7 @@
       "typeVersion": 1.2,
       "position": [
         3040,
-        200
+        208
       ],
       "id": "c9000000-0000-4000-8000-000000000024",
       "name": "WF-04: Validate Data",
@@ -271,7 +284,7 @@
       "typeVersion": 2,
       "position": [
         3280,
-        200
+        208
       ],
       "id": "c9000000-0000-4000-8000-000000000032",
       "name": "Prepare Submission Input"
@@ -281,7 +294,7 @@
         "workflowId": {
           "__rl": true,
           "mode": "id",
-          "value": "IVVPye7Jd4O0AFZ4"
+          "value": "yK0il8kT4YNzSN2y"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
@@ -297,7 +310,7 @@
       "typeVersion": 1.2,
       "position": [
         3520,
-        200
+        208
       ],
       "id": "c9000000-0000-4000-8000-000000000028",
       "name": "WF-06: Submit Order",
@@ -305,13 +318,13 @@
     },
     {
       "parameters": {
-        "jsCode": "const submissionResult = $input.first().json;\nconst submissionInput = $('Prepare Submission Input').first().json;\nconst subInput = $('Sub-Workflow Input').first().json;\nconst config = subInput.config;\n\nconst emailBody = subInput.emailBody || {};\n\nconst binary = $('Sub-Workflow Input').first().binary || {};\nconst binaryKeys = Object.keys(binary);\nconst attachmentBinary = {};\nif (binaryKeys.length > 0) {\n  attachmentBinary.data = binary[binaryKeys[0]];\n}\n\nreturn [{\n  json: {\n    config: config,\n    submissionResult: submissionResult,\n    validatedLines: submissionInput.validatedLines,\n    invalidLines: submissionInput.invalidLines,\n    summary: submissionInput.summary,\n    lineCount: submissionInput.lineCount,\n    senderEmail: subInput.senderEmail,\n    emailSubject: subInput.emailSubject,\n    emailId: subInput.emailId,\n    receivedAt: subInput.receivedAt,\n    businessCenter: submissionInput.businessCenter,\n    emailBodyHtml: subInput.emailBodyHtml || ''\n  },\n  binary: attachmentBinary\n}];\n"
+        "jsCode": "const submissionResult = $input.first().json;\nconst submissionInput = $('Prepare Submission Input').first().json;\nconst subInput = $('Sub-Workflow Input').first().json;\nconst config = subInput.config;\n\nconst binary = $('Sub-Workflow Input').first().binary || {};\n\nreturn [{\n  json: {\n    config: config,\n    submissionResult: submissionResult,\n    validatedLines: submissionInput.validatedLines,\n    invalidLines: submissionInput.invalidLines,\n    summary: submissionInput.summary,\n    lineCount: submissionInput.lineCount,\n    senderEmail: subInput.senderEmail,\n    emailSubject: subInput.emailSubject,\n    emailId: subInput.emailId,\n    receivedAt: subInput.receivedAt,\n    businessCenter: submissionInput.businessCenter,\n    emailBodyHtml: subInput.emailBodyHtml || '',\n    verificationIssues: subInput.verificationIssues || []\n  },\n  binary: binary\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         3760,
-        200
+        208
       ],
       "id": "c9000000-0000-4000-8000-000000000033",
       "name": "Prepare Notification Input"
@@ -321,7 +334,7 @@
         "workflowId": {
           "__rl": true,
           "mode": "id",
-          "value": "jHyOriThOcIbTBBw"
+          "value": "4cqdG7mU9JpE90qN"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
@@ -337,7 +350,7 @@
       "typeVersion": 1.2,
       "position": [
         4000,
-        200
+        208
       ],
       "id": "c9000000-0000-4000-8000-000000000026",
       "name": "WF-05: Send Order Notification",
@@ -361,7 +374,7 @@
       "typeVersion": 3.4,
       "position": [
         4240,
-        200
+        208
       ],
       "id": "c9000000-0000-4000-8000-000000000160",
       "name": "Set Token (Final)"
@@ -371,7 +384,7 @@
         "workflowId": {
           "__rl": true,
           "mode": "id",
-          "value": "bf5SHDMRH1MiEMfr"
+          "value": "a3WFhbGvOKzV81xE"
         },
         "options": {}
       },
@@ -379,7 +392,7 @@
       "typeVersion": 1.2,
       "position": [
         4480,
-        200
+        208
       ],
       "id": "c9000000-0000-4000-8000-000000000151",
       "name": "WF-00b: Get Graph Token"
@@ -387,7 +400,7 @@
     {
       "parameters": {
         "method": "PATCH",
-        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ }}/messages/{{ $('Sub-Workflow Input').first().json.emailId }}",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ_TEST }}/messages/{{ $('Sub-Workflow Input').first().json.emailId }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -406,7 +419,7 @@
       "typeVersion": 4.2,
       "position": [
         4720,
-        200
+        208
       ],
       "id": "c9000000-0000-4000-8000-000000000070",
       "name": "Mark as Read",
@@ -414,8 +427,71 @@
     },
     {
       "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Prepare Submission Input').first().json.summary.invalid }}",
+                    "rightValue": 0,
+                    "operator": {
+                      "type": "number",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputLabel": "All Valid"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Prepare Submission Input').first().json.summary.valid }}",
+                    "rightValue": 0,
+                    "operator": {
+                      "type": "number",
+                      "operation": "gt"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputLabel": "Partial"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        4960,
+        208
+      ],
+      "name": "Route by Validation",
+      "id": "087509d5-0dce-4dff-a113-9c12ad32676d"
+    },
+    {
+      "parameters": {
         "method": "POST",
-        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ }}/messages/{{ $('Sub-Workflow Input').first().json.emailId }}/move",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ_TEST }}/messages/{{ $('Sub-Workflow Input').first().json.emailId }}/move",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -427,17 +503,71 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "{ \"destinationId\": \"AAMkAGFkNDcyN2QxLWRlNjItNDNlNC05OTAxLTI3OTAyZjQxNDkyMwAuAAAAAAD-mcdOUa3OSLpHjBkPvPw4AQANdmeaGmDXS5HQxLaid2iyAAAAWzvaAAA=\" }",
+        "jsonBody": "{ \"destinationId\": \"%%MS_FOLDER_PROCESSED_ID%%\" }",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        4960,
-        200
+        5200,
+        0
       ],
-      "id": "c9000000-0000-4000-8000-000000000071",
-      "name": "Move to Processed"
+      "name": "Move to Processed",
+      "id": "fe337278-c2a2-4b1c-a592-1002e0c74d40"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ_TEST }}/messages/{{ $('Sub-Workflow Input').first().json.emailId }}/move",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('WF-00b: Get Graph Token').first().json.accessToken }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"destinationId\": \"%%MS_FOLDER_PARTIAL_ID%%\" }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5200,
+        208
+      ],
+      "name": "Move to Partial",
+      "id": "a11c2217-3d87-42f8-8a42-576ae48820af"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ_TEST }}/messages/{{ $('Sub-Workflow Input').first().json.emailId }}/move",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('WF-00b: Get Graph Token').first().json.accessToken }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"destinationId\": \"%%MS_FOLDER_ERROR_ID%%\" }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5200,
+        416
+      ],
+      "name": "Move to Error (Validation)",
+      "id": "78540a83-9bf6-4b33-8961-a64453f7184f"
     },
     {
       "parameters": {
@@ -448,6 +578,24 @@
               "name": "tokenType",
               "value": "graph_api",
               "type": "string"
+            },
+            {
+              "id": "c9-ste-002",
+              "name": "error",
+              "value": "={{ $json.error }}",
+              "type": "string"
+            },
+            {
+              "id": "c9-ste-003",
+              "name": "mailbox",
+              "value": "={{ $env.MS_GRAPH_MAILBOX_READ_TEST }}",
+              "type": "string"
+            },
+            {
+              "id": "c9-ste-004",
+              "name": "notificationEmail",
+              "value": "=vlatko.goljevacki@gmail.com",
+              "type": "string"
             }
           ]
         },
@@ -457,17 +605,17 @@
       "typeVersion": 3.4,
       "position": [
         3040,
-        -100
+        -96
       ],
       "id": "c9000000-0000-4000-8000-000000000163",
-      "name": "Set Token (Error)"
+      "name": "Set Config"
     },
     {
       "parameters": {
         "workflowId": {
           "__rl": true,
           "mode": "id",
-          "value": "bf5SHDMRH1MiEMfr"
+          "value": "a3WFhbGvOKzV81xE"
         },
         "options": {}
       },
@@ -475,15 +623,63 @@
       "typeVersion": 1.2,
       "position": [
         3280,
-        -100
+        -96
       ],
       "id": "c9000000-0000-4000-8000-000000000164",
       "name": "WF-00b: Refresh Token (Error)"
     },
     {
       "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Build Graph API sendMail payload for error notification\nconst config = $('Set Config').first().json;\nconst subInput = $('Sub-Workflow Input').first().json;\nconst binary = $('Sub-Workflow Input').first().binary || {};\nconst binaryKeys = Object.keys(binary);\n\nconst errorMsg = config.error || 'Unknown error';\nconst emailSubject = subInput.emailSubject || 'N/A';\nconst senderEmail = subInput.senderEmail || 'unknown';\nconst emailBodyHtml = subInput.emailBodyHtml || '';\n\nlet html = `<div style=\"padding:12px 16px;background:#f8d7da;color:#721c24;border-radius:6px;margin-bottom:16px;font-weight:bold;\">`;\nhtml += `ORDER PROCESSING ERROR`;\nhtml += `</div>`;\nhtml += `<p><strong>Error:</strong> ${errorMsg}</p>`;\nhtml += `<p><strong>From:</strong> ${senderEmail}<br>`;\nhtml += `<strong>Subject:</strong> ${emailSubject}</p>`;\n\nif (emailBodyHtml) {\n  html += `<hr style=\"margin:20px 0;\">`;\n  html += `<h3>Original Email</h3>`;\n  html += `<blockquote style=\"border-left:3px solid #ccc;padding:8px 16px;margin:8px 0;color:#555;\">${emailBodyHtml}</blockquote>`;\n}\n\nconst message = {\n  subject: `WF-09 Error: ${emailSubject}`,\n  body: { contentType: 'HTML', content: html },\n  toRecipients: [{ emailAddress: { address: config.notificationEmail } }]\n};\n\nif (binaryKeys.length > 0) {\n  message.attachments = binaryKeys.map(key => {\n    const att = binary[key];\n    return {\n      '@odata.type': '#microsoft.graph.fileAttachment',\n      name: att.fileName || 'attachment',\n      contentType: att.mimeType || 'application/octet-stream',\n      contentBytes: att.data\n    };\n  });\n}\n\nreturn [{ json: { sendMailPayload: { message } } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        -96
+      ],
+      "id": "c9000000-0000-4000-8000-000000000093",
+      "name": "Build Warning Email"
+    },
+    {
+      "parameters": {
         "method": "POST",
-        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ }}/messages/{{ $('Sub-Workflow Input').first().json.emailId }}/move",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $('Set Config').first().json.mailbox }}/sendMail",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('WF-00b: Refresh Token (Error)').first().json.accessToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.sendMailPayload) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3776,
+        -96
+      ],
+      "id": "c9000000-0000-4000-8000-000000000092",
+      "name": "Send Warning Email",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $('Set Config').first().json.mailbox }}/messages/{{ $('Sub-Workflow Input').first().json.emailId }}/move",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -495,14 +691,14 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "{ \"destinationId\": \"AAMkAGFkNDcyN2QxLWRlNjItNDNlNC05OTAxLTI3OTAyZjQxNDkyMwAuAAAAAAD-mcdOUa3OSLpHjBkPvPw4AQANdmeaGmDXS5HQxLaid2iyAAAAWzvbAAA=\" }",
+        "jsonBody": "{ \"destinationId\": \"%%MS_FOLDER_ERROR_ID%%\" }",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3520,
-        -100
+        4032,
+        -96
       ],
       "id": "c9000000-0000-4000-8000-000000000072",
       "name": "Move to Error"
@@ -524,7 +720,36 @@
       "main": [
         [
           {
+            "node": "Has Pharmacy IDs?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Pharmacy IDs?": {
+      "main": [
+        [
+          {
             "node": "DT: Lookup Delivery Places",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Error: No Pharmacy IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Error: No Pharmacy IDs": {
+      "main": [
+        [
+          {
+            "node": "Set Config",
             "type": "main",
             "index": 0
           }
@@ -608,43 +833,14 @@
       "main": [
         [
           {
-            "node": "All Found After Refresh?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "All Found After Refresh?": {
-      "main": [
-        [
-          {
             "node": "Prepare Validator Input",
             "type": "main",
             "index": 0
           }
-        ],
-        [
-          {
-            "node": "Customer Lookup Failed",
-            "type": "main",
-            "index": 0
-          }
         ]
       ]
     },
-    "Customer Lookup Failed": {
-      "main": [
-        [
-          {
-            "node": "Set Token (Error)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Set Token (Error)": {
+    "Set Config": {
       "main": [
         [
           {
@@ -656,6 +852,28 @@
       ]
     },
     "WF-00b: Refresh Token (Error)": {
+      "main": [
+        [
+          {
+            "node": "Build Warning Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Warning Email": {
+      "main": [
+        [
+          {
+            "node": "Send Warning Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Warning Email": {
       "main": [
         [
           {
@@ -758,7 +976,32 @@
       "main": [
         [
           {
+            "node": "Route by Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Validation": {
+      "main": [
+        [
+          {
             "node": "Move to Processed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Move to Partial",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Move to Error (Validation)",
             "type": "main",
             "index": 0
           }

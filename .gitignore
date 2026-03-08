@@ -1,4 +1,7 @@
 .env
+.env.workflow
+.env.workflow.test
+.env.workflow.prod
 workflows/**
 !workflows/example_**
 !workflows/test/

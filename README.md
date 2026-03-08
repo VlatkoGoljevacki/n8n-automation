@@ -1,143 +1,261 @@
-# n8n Automation
+# Medika Automation
 
-Self-hosted [n8n](https://n8n.io/) workflow automation running in Docker.
+Self-hosted [n8n](https://n8n.io/) automation server for Medika pre-order processing. Runs in Docker, accessed via SSH tunnel (not publicly exposed).
 
 ## Prerequisites
 
-- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) installed
+- Docker and Docker Compose
+- SSH access to the server (see [Hetzner deployment guide](docs/HETZNER-DEPLOYMENT.md))
 
 ## Quick Start
 
-1. **Copy the environment file and adjust if needed:**
+```bash
+cp .env.example .env
+# Fill in secrets (ERP credentials, MS Graph, API keys)
+# Test vars use _TEST suffix, prod vars use bare names
 
-   ```bash
-   cp .env.example .env
-   ```
+docker compose up -d
+```
 
-2. **Start n8n:**
+Access via SSH tunnel:
 
-   ```bash
-   docker compose up -d
-   ```
+```bash
+ssh -L 5678:localhost:5678 deploy@YOUR_SERVER_IP
+# Then open http://localhost:5678
+```
 
-3. **Open the UI:** visit [http://localhost:5678](http://localhost:5678) and create your owner account on first launch.
+## Environment Variables
 
-## Configuration
+Two kinds of variables, managed in different places:
 
-All settings are configurable via the `.env` file:
+| Type | Where | Purpose | Example |
+|------|-------|---------|---------|
+| **Runtime** (`$env.X`) | `.env` → docker-compose → n8n container | Accessed by workflows at runtime | `MEDIKA_ERP_URL_TEST`, `MEDIKA_ERP_URL` |
+| **Deploy-time** (`%%X%%`) | `.env.workflow.test` / `.env.workflow.prod` (local only) | Substituted into workflow JSON before deploy | `DT_CUSTOMERS_ID`, `MS_FOLDER_PROCESSING_ID` |
 
-| Variable                      | Default          | Description                                         |
-|-------------------------------|------------------|-----------------------------------------------------|
-| `N8N_PORT`                    | `5678`           | Port exposed on the host                            |
-| `N8N_SECURE_COOKIE`           | `false`          | Set to `true` when running behind HTTPS             |
-| `DB_SQLITE_POOL_SIZE`         | `2`              | Read connection pool size; enables WAL mode when > 0 |
-| `DB_SQLITE_VACUUM_ON_STARTUP` | `false`          | Run VACUUM on startup to reclaim disk space          |
-| `GENERIC_TIMEZONE`            | `Europe/Zagreb`  | Timezone used by n8n for scheduling                 |
-| `TZ`                          | `Europe/Zagreb`  | Container system timezone                           |
+**Runtime vars** — test workflows reference `$env.X_TEST` (e.g. `$env.MEDIKA_ERP_URL_TEST`),
+prod workflows reference `$env.X` (e.g. `$env.MEDIKA_ERP_URL`). Both sets are defined in the
+server's `.env` and loaded into the n8n container. This allows test and prod workflows to
+coexist on the same server with separate credentials and endpoints.
+
+**Deploy-time vars** — `.env.workflow.{test,prod}` files are local only (gitignored).
+The deploy script substitutes `%%VAR%%` placeholders before sending JSON to the n8n API.
+Set up from the example templates:
+
+```bash
+cp .env.workflow.test.example .env.workflow.test
+cp .env.workflow.prod.example .env.workflow.prod
+# Fill in server-specific IDs (DataTable IDs, MS Graph folder IDs)
+```
 
 ## Project Structure
 
 ```
-n8n-automation/
-├── docker-compose.yml   # n8n service definition
-├── .env.example         # environment variable template
-├── .gitignore           # ignores .env to keep secrets out of git
-└── workflows/           # exported workflow JSON files
+medika-automation/
+├── docker-compose.yml          # local development
+├── docker-compose.server.yml   # server (no volume mounts)
+├── .env.example                # runtime env var template
+├── .env.workflow.test.example  # deploy-time var template (test)
+├── .env.workflow.prod.example  # deploy-time var template (prod)
+├── workflows/
+│   ├── test/
+│   │   ├── medika-preorders/   # test workflows
+│   │   └── shared/             # cross-project workflows (disk alerts, etc.)
+│   └── prod/
+│       └── medika-preorders/   # production (populated via promote)
+├── scripts/
+│   ├── deploy-workflows.sh     # deploy/pull/promote workflows via n8n API
+│   ├── lint-workflows.py       # structural checks (runs as pre-deploy gate)
+│   └── sync-datatables.sh      # sync DataTable schemas with server
+├── helpers/
+│   ├── executions.sh           # inspect workflow executions
+│   ├── inspect.sh              # inspect workflows and nodes
+│   └── datatables.sh           # manage DataTables (list, rows, drop)
+├── datatables/
+│   └── datatables.json         # DataTable schema registry with server IDs
+├── credentials/
+│   └── credentials.json        # n8n credential exports (encrypted)
+└── docs/                       # detailed guides
 ```
 
-## Managing Workflows
+## Workflow Management
 
-### Importing a workflow
+All commands require an active SSH tunnel and `N8N_API_KEY` set in `.env`.
 
-1. Open the n8n UI
-2. Go to **Workflows** > **Add Workflow** > **Import from File**
-3. Select a JSON file from the `workflows/` directory
-
-### Exporting a workflow
-
-1. Open the workflow in the n8n UI
-2. Click the **three-dot menu** (top right) > **Download**
-3. Save the JSON file into the `workflows/` directory to version-control it
-
-The `workflows/` directory is also volume-mounted into the container at `/home/node/workflows`, so files placed there are accessible from within n8n as well.
-
-## Useful Commands
+### Deploy workflows to server
 
 ```bash
-# Start
-docker compose up -d
+# Deploy all test workflows
+./scripts/deploy-workflows.sh medika-preorders
 
-# Stop
-docker compose down
+# Deploy a single file
+./scripts/deploy-workflows.sh workflows/test/medika-preorders/01_orchestrator.json
 
-# View logs
-docker compose logs -f n8n
+# Activate sub-workflows (skips WF-01/01b entry points)
+./scripts/deploy-workflows.sh medika-preorders publish
 
-# Restart
-docker compose restart n8n
+# Activate ALL including entry points (WF-01/01b)
+./scripts/deploy-workflows.sh medika-preorders publish --force-activate
 
-# Update n8n (change image tag in docker-compose.yml, then)
-docker compose pull && docker compose up -d
+# Deactivate all
+./scripts/deploy-workflows.sh medika-preorders unpublish
 ```
 
-## Database
-
-n8n supports **SQLite** (default) and **PostgreSQL**. This setup uses SQLite with WAL (Write-Ahead Logging) mode enabled via `DB_SQLITE_POOL_SIZE=2`.
-
-### SQLite + WAL vs PostgreSQL
-
-| | SQLite + WAL | PostgreSQL |
-|---|---|---|
-| **Setup** | Zero config — embedded in n8n | Separate container + credentials |
-| **RAM overhead** | ~0 (runs inside n8n process) | +150-300 MB |
-| **Concurrency** | Parallel reads, single writer (queue-based) | Full concurrent reads + writes |
-| **Lock risk** | Low with WAL, possible under heavy webhook bursts | None — row-level locking |
-| **Backup** | Copy the `.sqlite` file or `tar` the volume | `pg_dump`, point-in-time recovery |
-| **Multi-instance** | Single instance only | Supported |
-| **Maintenance** | Set `DB_SQLITE_VACUUM_ON_STARTUP=true` to reclaim space | Autovacuum built-in |
-
-**When to stick with SQLite + WAL:** light-to-medium usage, scheduled workflows, fewer moving parts, saving RAM on a shared server.
-
-**When to switch to PostgreSQL:** high webhook concurrency, need for multi-instance scaling, or you already run PostgreSQL for other services.
-
-Migrating from SQLite to PostgreSQL later is straightforward if needed.
-
-## Data Persistence
-
-Workflow data, credentials, and settings are stored in the `n8n_data` Docker volume. This volume persists across container restarts and recreations. To back it up:
+### Pull workflows from server
 
 ```bash
-docker run --rm -v n8n_data:/data -v $(pwd):/backup alpine tar czf /backup/n8n_backup.tar.gz -C /data .
+# Pull test workflows (server -> local files)
+./scripts/deploy-workflows.sh medika-preorders pull
+
+# Pull prod
+./scripts/deploy-workflows.sh medika-preorders --env prod pull
 ```
 
-To restore:
+### Promote test to production
 
 ```bash
-docker run --rm -v n8n_data:/data -v $(pwd):/backup alpine tar xzf /backup/n8n_backup.tar.gz -C /data
+# Copy + transform files only (test -> prod)
+./scripts/deploy-workflows.sh medika-preorders promote
+
+# Copy + transform + deploy to server
+./scripts/deploy-workflows.sh medika-preorders promote --deploy
 ```
 
-## Workflow Design Checklist
+### Deploy prod workflows
 
-Common pitfalls and best practices discovered while building workflows. Refer to this when creating new workflows or debugging existing ones.
+```bash
+./scripts/deploy-workflows.sh medika-preorders --env prod deploy
+```
 
-### HTTP Request Nodes
+## DataTable Management
 
-- **Use the correct HTTP method.** Geocoding and similar lookup APIs are GET, not POST. Sending the wrong method may still work when using query parameters but is incorrect and may break with API updates.
-- **Pass API keys via headers, not query parameters.** Query params end up in server logs, browser history, and URL-based monitoring. Use the appropriate auth header (e.g. `X-Goog-Api-Key` for Google APIs).
-- **Use variables you define.** If a Set node declares a parameter like `radius`, reference it in downstream nodes (`{{ $('Edit Fields').item.json.radius }}`) instead of hardcoding the value in the JSON body. Otherwise the Set node creates a false sense of configurability.
+```bash
+# Sync schemas from server to local registry
+./scripts/sync-datatables.sh pull
 
-### Location and Geo Queries
+# Create new tables (id: null in registry) on server
+./scripts/sync-datatables.sh push
 
-- **Match radius to search area.** A 1 km radius from a centroid will miss most of a large region. Either use a radius that covers the area, use `locationRestriction` with a bounding rectangle, or omit location bias when the text query already contains the location name.
-- **Understand bias vs restriction.** `locationBias` prefers results near a point but can return results anywhere. `locationRestriction` strictly limits results to the defined area. Choose based on intent.
+# Show differences
+./scripts/sync-datatables.sh diff
+```
 
-### Pagination
+### Inspect DataTables
 
-- **Avoid duplicating the entire flow for pagination.** The first-page path and subsequent-page path often end up as near-identical node chains. Where possible, structure the workflow so the same nodes handle both first and subsequent pages.
-- **Add a delay between paginated API calls.** Use a Wait node to avoid hitting rate limits on external APIs.
-- **Don't read an entire sheet to count rows.** Maintain a running counter (in a DataTable or variable) instead of fetching all rows from Google Sheets and counting them. The sheet-read approach slows down as data grows.
+```bash
+./helpers/datatables.sh list                  # list all tables
+./helpers/datatables.sh rows TABLE_ID [N]     # show first N rows
+./helpers/datatables.sh count TABLE_ID        # count rows
+```
 
-### Environment Variables
+## Debugging
 
-- **Store secrets in `.env`, not in workflow nodes.** API keys and credentials belong in environment variables. Reference them with `{{ $env.VAR_NAME }}`.
-- **Use n8n Variables for non-sensitive config.** Settings > Variables lets you manage key-value pairs from the UI, accessible via `{{ $vars.VAR_NAME }}`. Good for spreadsheet IDs, sheet names, and other config that changes between environments.
+```bash
+# List recent executions
+./helpers/executions.sh list [N]
+
+# Show failed executions
+./helpers/executions.sh errors [N]
+
+# Per-node breakdown of an execution
+./helpers/executions.sh detail EXEC_ID
+
+# Inspect a specific node's output (full data, no truncation)
+./helpers/executions.sh node EXEC_ID NODE_NAME
+
+# Executions for a specific workflow
+./helpers/executions.sh wf WORKFLOW_ID [N]
+
+# Auto-debug last failure
+./helpers/executions.sh debug
+
+# List workflows with active/inactive status
+./helpers/inspect.sh list
+
+# Show nodes in a workflow
+./helpers/inspect.sh nodes WORKFLOW_ID
+
+# Diff server vs local file
+./helpers/inspect.sh diff WORKFLOW_ID FILE
+```
+
+> **Note:** The `detail`, `node`, and `debug` commands use the n8n API's `includeData=true` parameter to fetch full node-level output. This parameter only works on the single-execution endpoint (`GET /executions/{id}`), not on the list endpoint.
+
+## Common Commands
+
+```bash
+docker compose up -d              # start
+docker compose down               # stop
+docker compose restart            # restart
+docker compose logs -f n8n        # logs
+docker compose pull && docker compose up -d   # update n8n
+```
+
+## Working with Claude Code
+
+This repo is set up for use with [Claude Code](https://claude.com/claude-code). Claude can read/edit workflow JSON files, run the deploy and helper scripts, inspect executions, and debug failures — all through the CLI.
+
+### What Claude can do
+
+- **Edit workflows** — Read and modify workflow JSON files directly (add/remove nodes, change parameters, fix connections)
+- **Deploy workflows** — Run `./scripts/deploy-workflows.sh` to push changes to the n8n server
+- **Pull workflows** — Sync server state back to local files
+- **Promote test to prod** — Run the promote command to copy and transform workflows
+- **Inspect executions** — List recent runs, check failures, drill into per-node output
+- **Inspect workflows** — List active workflows, view node configs, diff server vs local
+- **Manage DataTables** — Sync schemas, list rows, check table state
+- **Debug failures** — Run `./helpers/executions.sh debug` to auto-analyze the last failed execution
+
+### Prerequisites
+
+An SSH tunnel must be active for Claude to reach the n8n API:
+
+```bash
+ssh -L 5678:localhost:5678 deploy@YOUR_SERVER_IP
+```
+
+### Getting oriented
+
+New to the repo? Start here:
+
+```
+"Explain the workflow architecture — what does each WF do?"
+"Walk me through what happens when a pre-order email arrives"
+"What credentials and APIs does this project use?"
+"What's the difference between test and prod workflows?"
+```
+
+Claude has access to the full implementation plan (`docs/medika_preorder_automation.md`) and can read any workflow JSON to answer questions about the system.
+
+### Example prompts
+
+```
+# Workflow development
+"Add a 30-second timeout to the Wait node in WF-05"
+"Deploy the orchestrator workflow to test"
+"Pull all test workflows from the server"
+"Promote medika-preorders to prod and deploy"
+
+# Debugging
+"What failed in the last execution?"
+"Show me the output of the XLSX Parser node in execution 12345"
+"List all inactive workflows"
+"Why is WF-03 failing on the HTTP Request node?"
+
+# Infrastructure
+"Show me the last 5 executions for the orchestrator"
+"How many rows are in the Customers DataTable?"
+"Diff the local orchestrator file against the server version"
+```
+
+### Tips
+
+- Always **pull before editing** to make sure local files match the server
+- After Claude edits a workflow JSON, ask it to **deploy** — edits to local files don't affect the running server
+- Claude has skills for n8n node configuration, expression syntax, and workflow patterns — invoke with `/n8n-*` commands
+- The implementation plan at `docs/medika_preorder_automation.md` has full context on the workflow architecture, API specs, and data formats — point Claude to it for complex tasks
+
+## Deployment
+
+- [Server setup](docs/HETZNER-DEPLOYMENT.md) — Hetzner provisioning, Docker, SSH tunnel
+- [Deployment order](docs/deployment_order.md) — Fresh server setup, dependency map, activation order

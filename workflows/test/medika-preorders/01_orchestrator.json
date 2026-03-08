@@ -30,6 +30,30 @@
               "name": "tokenType",
               "value": "graph_api",
               "type": "string"
+            },
+            {
+              "id": "b1-set-002",
+              "name": "emailBatchSize",
+              "value": 9,
+              "type": "number"
+            },
+            {
+              "id": "b1-set-003",
+              "name": "processingBatchSize",
+              "value": 3,
+              "type": "number"
+            },
+            {
+              "id": "b1-set-004",
+              "name": "waitBetweenBatchesSec",
+              "value": 3,
+              "type": "number"
+            },
+            {
+              "id": "b1-set-005",
+              "name": "processEmailWebhookPath",
+              "value": "test-process-email",
+              "type": "string"
             }
           ]
         },
@@ -42,13 +66,13 @@
         -320
       ],
       "id": "b1000000-0000-4000-8000-000000000091",
-      "name": "Set Token Type"
+      "name": "Config"
     },
     {
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "value": "bf5SHDMRH1MiEMfr",
+          "value": "a3WFhbGvOKzV81xE",
           "mode": "id"
         },
         "workflowInputs": {
@@ -72,7 +96,7 @@
     },
     {
       "parameters": {
-        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ }}/mailFolders/inbox/messages?$filter=isRead eq false&$top=1&$orderby=receivedDateTime asc",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ_TEST }}/mailFolders/inbox/messages?$filter=isRead eq false&$top={{ $('Config').first().json.emailBatchSize }}&$orderby=receivedDateTime asc",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -111,7 +135,7 @@
     },
     {
       "parameters": {
-        "batchSize": 3,
+        "batchSize": "={{ $('Config').first().json.processingBatchSize }}",
         "options": {}
       },
       "type": "n8n-nodes-base.splitInBatches",
@@ -126,7 +150,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ }}/messages/{{ $json.id }}/move",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ_TEST }}/messages/{{ $json.id }}/move",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -138,7 +162,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "{ \"destinationId\": \"AAMkAGFkNDcyN2QxLWRlNjItNDNlNC05OTAxLTI3OTAyZjQxNDkyMwAuAAAAAAD-mcdOUa3OSLpHjBkPvPw4AQANdmeaGmDXS5HQxLaid2iyAAAAWzvZAAA=\" }",
+        "jsonBody": "{ \"destinationId\": \"%%MS_FOLDER_PROCESSING_ID%%\" }",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -153,7 +177,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://localhost:5678/webhook-test/test-process-email",
+        "url": "=http://localhost:5678/webhook/{{ $('Config').first().json.processEmailWebhookPath }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}",
@@ -170,7 +194,7 @@
     },
     {
       "parameters": {
-        "amount": 3
+        "amount": "={{ $('Config').first().json.waitBetweenBatchesSec }}"
       },
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
@@ -188,18 +212,7 @@
       "main": [
         [
           {
-            "node": "Set Token Type",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Set Token Type": {
-      "main": [
-        [
-          {
-            "node": "WF-00b: Get Token",
+            "node": "Config",
             "type": "main",
             "index": 0
           }
@@ -278,6 +291,17 @@
         [
           {
             "node": "Batch of 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "WF-00b: Get Token",
             "type": "main",
             "index": 0
           }

@@ -10,6 +10,12 @@
 #   ./helpers/executions.sh node EXEC_ID NODE  # output data from a specific node
 #   ./helpers/executions.sh debug              # auto-debug last failed execution
 #   ./helpers/executions.sh wf WORKFLOW_ID [N] # last N executions for a workflow
+#
+# n8n API notes:
+#   - GET /executions/{id}?includeData=true returns full node-level output data.
+#     Without includeData=true, the response only contains metadata (status, times).
+#   - The includeData param only works on the single-execution endpoint,
+#     NOT on the list endpoint (GET /executions).
 
 set -euo pipefail
 
@@ -121,7 +127,7 @@ for run in runs:
             j = item.get('json', {})
             has_binary = bool(item.get('binary'))
             print(f'--- Branch {branch_idx}, Item {i} {\"[+binary]\" if has_binary else \"\"} ---')
-            print(json.dumps(j, indent=2, ensure_ascii=False)[:3000])
+            print(json.dumps(j, indent=2, ensure_ascii=False))
     error = run.get('error')
     if error:
         print(f'ERROR: {error.get(\"message\", \"\")}')
@@ -129,12 +135,21 @@ for run in runs:
     ;;
 
   debug)
-    api "executions?limit=1&status=error&includeData=true" | python3 -c "
+    # First get the last failed execution ID from list endpoint
+    EXEC_ID=$(api "executions?limit=1&status=error" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
-if not data.get('data'):
-    print('No failed executions found'); sys.exit()
-e = data['data'][0]
+if data.get('data'):
+    print(data['data'][0]['id'])
+")
+    if [ -z "$EXEC_ID" ]; then
+      echo "No failed executions found"
+      exit 0
+    fi
+    # Then fetch full execution data with includeData
+    api "executions/${EXEC_ID}?includeData=true" | python3 -c "
+import sys, json
+e = json.load(sys.stdin)
 name = e.get('workflowData', {}).get('name', e.get('workflowId', ''))
 rd = e.get('data', {}).get('resultData', {}).get('runData', {})
 print(f'Last failure: #{e[\"id\"]} — {name}')

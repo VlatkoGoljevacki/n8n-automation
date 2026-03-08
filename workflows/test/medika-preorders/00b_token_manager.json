@@ -83,19 +83,19 @@
             {
               "id": "f0b-cfg-001",
               "name": "erpApiUrl",
-              "value": "={{ $env.MEDIKA_ERP_URL }}",
+              "value": "={{ $env.MEDIKA_ERP_URL_TEST }}",
               "type": "string"
             },
             {
               "id": "f0b-cfg-002",
               "name": "erpUsername",
-              "value": "={{ $env.MEDIKA_ERP_USERNAME }}",
+              "value": "={{ $env.MEDIKA_ERP_USERNAME_TEST }}",
               "type": "string"
             },
             {
               "id": "f0b-cfg-003",
               "name": "erpPassword",
-              "value": "={{ $env.MEDIKA_ERP_PASSWORD }}",
+              "value": "={{ $env.MEDIKA_ERP_PASSWORD_TEST }}",
               "type": "string"
             },
             {
@@ -107,13 +107,13 @@
             {
               "id": "f0b-cfg-005",
               "name": "tokenUrl",
-              "value": "={{ $env.MEDIKA_ERP_URL + '/Token' }}",
+              "value": "={{ $env.MEDIKA_ERP_URL_TEST + '/Token' }}",
               "type": "string"
             },
             {
               "id": "f0b-cfg-006",
               "name": "tokenBody",
-              "value": "={{ 'grant_type=password&username=' + encodeURIComponent($env.MEDIKA_ERP_USERNAME) + '&password=' + encodeURIComponent($env.MEDIKA_ERP_PASSWORD) }}",
+              "value": "={{ 'grant_type=password&username=' + encodeURIComponent($env.MEDIKA_ERP_USERNAME_TEST) + '&password=' + encodeURIComponent($env.MEDIKA_ERP_PASSWORD_TEST) }}",
               "type": "string"
             }
           ]
@@ -169,7 +169,7 @@
         "operation": "get",
         "dataTableId": {
           "__rl": true,
-          "value": "2OXhQe9PldAX5fYo",
+          "value": "%%DT_TOKENS_ID%%",
           "mode": "list",
           "cachedResultName": "Tokens"
         },
@@ -301,10 +301,10 @@
         "operation": "upsert",
         "dataTableId": {
           "__rl": true,
-          "value": "2OXhQe9PldAX5fYo",
+          "value": "%%DT_TOKENS_ID%%",
           "mode": "list",
           "cachedResultName": "Tokens",
-          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/2OXhQe9PldAX5fYo"
+          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/%%DT_TOKENS_ID%%"
         },
         "matchType": "allConditions",
         "filters": {

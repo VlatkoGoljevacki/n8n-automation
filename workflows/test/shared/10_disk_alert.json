@@ -1,0 +1,66 @@
+{
+  "name": "[shared-test] WF-10: Disk Alert",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "disk-alert",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "d15ca1e7-0000-4000-8000-000000000001",
+      "name": "Disk Alert Webhook",
+      "webhookId": "disk-alert"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "mislav.cotic@gmail.com,vlatko.goljevacki@gmail.com",
+        "subject": "=[shared] Disk usage at {{ $json.body.usage }}%",
+        "bodyContent": "=<h2>Disk Space Alert</h2>\n<table style=\"border-collapse:collapse; font-family:sans-serif;\">\n<tr><td style=\"padding:4px 12px; font-weight:bold;\">Usage</td><td style=\"padding:4px 12px; color:red;\">{{ $json.body.usage }}%</td></tr>\n<tr><td style=\"padding:4px 12px; font-weight:bold;\">Details</td><td style=\"padding:4px 12px;\">{{ $json.body.detail }}</td></tr>\n<tr><td style=\"padding:4px 12px; font-weight:bold;\">Host</td><td style=\"padding:4px 12px;\">{{ $json.body.hostname }}</td></tr>\n<tr><td style=\"padding:4px 12px; font-weight:bold;\">Time</td><td style=\"padding:4px 12px;\">{{ $now.toISO() }}</td></tr>\n</table>",
+        "bodyContentType": "html",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "id": "d15ca1e7-0000-4000-8000-000000000002",
+      "name": "Send Disk Alert Email",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "",
+          "name": "Medika Preorders - Microsoft Outlook"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Disk Alert Webhook": {
+      "main": [
+        [
+          {
+            "node": "Send Disk Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": []
+}

@@ -1,9 +1,14 @@
-# n8n Automation Server — Local Development
-# Mounts ./workflows for local editing. NOT used on the server.
-# For server deployment, use docker-compose.server.yml.
+# n8n Automation Server — Production
+# No git repo needed on the server. Workflows are deployed via API.
 #
-# Usage:
-#   docker compose up -d
+# Setup:
+#   scp docker-compose.server.yml deploy@server:/home/deploy/medika-automation/docker-compose.yml
+#   scp .env deploy@server:/home/deploy/medika-automation/.env
+#   ssh deploy@server "cd medika-automation && docker compose up -d"
+#
+# Access via SSH tunnel:
+#   ssh -L 5678:localhost:5678 deploy@server
+#   Then open http://localhost:5678
 
 services:
   n8n:
@@ -15,7 +20,6 @@ services:
       - "127.0.0.1:${N8N_PORT:-5678}:${N8N_PORT:-5678}"
     volumes:
       - n8n_data:/home/node/.n8n
-      - ./workflows:/home/node/workflows
     environment:
       - N8N_SECURE_COOKIE=${N8N_SECURE_COOKIE:-false}
       - DB_SQLITE_POOL_SIZE=${DB_SQLITE_POOL_SIZE:-2}

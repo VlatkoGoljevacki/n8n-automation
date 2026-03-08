@@ -33,7 +33,7 @@ Manual Trigger → Load Test Fixtures (Code) → SplitInBatches →
 - Mixed valid/invalid codes → verify correct split
 - Fuzzy name matching → verify match quality
 
-### WF-05: Approval Gate
+### WF-05: Send Order Notification
 - Form submitted with Approve → verify approved=true output
 - Form submitted with Reject → verify rejected=true output
 - Timeout → verify auto-reject

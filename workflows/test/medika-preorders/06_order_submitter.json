@@ -22,7 +22,7 @@
             {
               "id": "f6-cfg-001",
               "name": "erpApiUrl",
-              "value": "={{ $env.MEDIKA_ERP_URL }}",
+              "value": "={{ $env.MEDIKA_ERP_URL_TEST }}",
               "type": "string"
             }
           ]
@@ -43,7 +43,7 @@
         "workflowId": {
           "__rl": true,
           "mode": "id",
-          "value": "bf5SHDMRH1MiEMfr"
+          "value": "a3WFhbGvOKzV81xE"
         },
         "options": {}
       },

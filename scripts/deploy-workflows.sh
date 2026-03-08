@@ -45,12 +45,69 @@ fi
 N8N_API_URL="${N8N_API_URL:-http://localhost:5678}"
 N8N_API_KEY="${N8N_API_KEY:-}"
 
+# ── Workflow variable substitution ───────────────────────────────
+# Replaces %%VAR%% placeholders with values from .env.workflow.{ENV} (deploy)
+# and reverses the substitution on pull.
+# Uses $ENV to select .env.workflow.test or .env.workflow.prod.
+# Falls back to .env.workflow for backwards compatibility.
+apply_workflow_vars() {
+  local vars_file=".env.workflow.${ENV}"
+  [ ! -f "$vars_file" ] && vars_file=".env.workflow"
+  python3 -c "
+import sys
+vars = {}
+try:
+    with open(sys.argv[1]) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            key, _, value = line.partition('=')
+            key, value = key.strip(), value.strip()
+            if key and value:
+                vars[key] = value
+except FileNotFoundError:
+    pass
+content = sys.stdin.read()
+for key, value in vars.items():
+    content = content.replace('%%' + key + '%%', value)
+sys.stdout.write(content)
+" "$vars_file"
+}
+
+reverse_workflow_vars() {
+  local vars_file=".env.workflow.${ENV}"
+  [ ! -f "$vars_file" ] && vars_file=".env.workflow"
+  python3 -c "
+import sys
+vars = {}
+try:
+    with open(sys.argv[1]) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            key, _, value = line.partition('=')
+            key, value = key.strip(), value.strip()
+            if key and value:
+                vars[key] = value
+except FileNotFoundError:
+    pass
+content = sys.stdin.read()
+# Sort by value length descending to avoid partial replacements
+for key, value in sorted(vars.items(), key=lambda x: len(x[1]), reverse=True):
+    content = content.replace(value, '%%' + key + '%%')
+sys.stdout.write(content)
+" "$vars_file"
+}
+
 # ── Argument parsing ───────────────────────────────────────────────
 ENV="test"
 PROJECT=""
 COMMAND="deploy"
 SINGLE_FILE=""
 PROMOTE_DEPLOY=false
+FORCE_ACTIVATE=false
 
 # Smart detection: if first arg is a file path, extract project and env
 if [ $# -gt 0 ] && [[ "$1" == */* ]] && [[ "$1" == *.json ]]; then
@@ -95,6 +152,10 @@ else
         PROMOTE_DEPLOY=true
         shift
         ;;
+      --force-activate)
+        FORCE_ACTIVATE=true
+        shift
+        ;;
       deploy|pull|publish|unpublish|promote)
         COMMAND="$1"
         shift
@@ -121,6 +182,36 @@ if [ -z "$N8N_API_KEY" ]; then
   exit 1
 fi
 
+# ── Pre-deploy gates (lint + tests) ──────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+if [ "$COMMAND" = "deploy" ] || [ "$COMMAND" = "promote" ]; then
+  echo "Running lint checks..."
+  if [ -n "$SINGLE_FILE" ]; then
+    lint_target="$SINGLE_FILE"
+  else
+    lint_target="$PROJECT --env $ENV"
+  fi
+  if ! python3 "${SCRIPT_DIR}/lint-workflows.py" $lint_target; then
+    echo ""
+    echo "Deploy aborted: lint checks failed. Fix errors above before deploying."
+    exit 1
+  fi
+  echo ""
+
+  # Run tests if test files exist
+  test_files=("${ROOT_DIR}"/tests/test_*.mjs)
+  if [ -e "${test_files[0]}" ]; then
+    echo "Running tests..."
+    if ! node --test "${ROOT_DIR}"/tests/test_*.mjs; then
+      echo ""
+      echo "Deploy aborted: tests failed. Fix errors above before deploying."
+      exit 1
+    fi
+    echo ""
+  fi
+fi
+
 # Promote doesn't need API connectivity
 if [ "$COMMAND" != "promote" ] || [ "$PROMOTE_DEPLOY" = true ]; then
   # Verify API connectivity
@@ -143,6 +234,8 @@ fetch_name_id_map() {
 import sys, json
 data = json.load(sys.stdin)
 for w in data.get('data', []):
+    if w.get('isArchived'):
+        continue
     print(w['id'] + '\t' + w['name'])
 " 2>/dev/null || true
 }
@@ -155,6 +248,8 @@ fetch_name_id_active_map() {
 import sys, json
 data = json.load(sys.stdin)
 for w in data.get('data', []):
+    if w.get('isArchived'):
+        continue
     print(w['id'] + '\t' + w['name'] + '\t' + str(w.get('active', False)))
 " 2>/dev/null || true
 }
@@ -361,6 +456,13 @@ for node in wf.get('nodes', []):
     if isinstance(url, str) and 'webhook/test-' in url:
         params['url'] = url.replace('webhook/test-', 'webhook/')
 
+# Transform test env vars to prod: \$env.X_TEST → \$env.X
+content = json.dumps(wf, ensure_ascii=False)
+for var in ['MEDIKA_ERP_URL', 'MEDIKA_ERP_USERNAME', 'MEDIKA_ERP_PASSWORD',
+            'MS_GRAPH_MAILBOX_READ', 'MS_GRAPH_MAILBOX_SEND']:
+    content = content.replace('\$env.' + var + '_TEST', '\$env.' + var)
+wf = json.loads(content)
+
 with open(sys.argv[4], 'w') as f:
     json.dump(wf, f, indent=2, ensure_ascii=False)
     f.write('\n')
@@ -424,7 +526,7 @@ out = {k: v for k, v in w.items() if k in keep}
 # Normalize: always set active=false in repo (activation is a runtime concern)
 out['active'] = False
 print(json.dumps(out, indent=2, ensure_ascii=False))
-" > "$file"
+" | reverse_workflow_vars > "$file"
 
     echo "PULLED (id: $existing_id)"
     pulled=$((pulled + 1))
@@ -443,6 +545,32 @@ if [ "$COMMAND" = "publish" ] || [ "$COMMAND" = "unpublish" ]; then
   else
     verb="Deactivating"
     past="deactivated"
+  fi
+
+  # Sort files by trigger type: sub-workflows first, then webhook, then scheduleTrigger.
+  # This ensures dependencies are active before the workflows that call them.
+  if [ "$COMMAND" = "publish" ]; then
+    sorted_files=()
+    for priority in sub webhook scheduleTrigger; do
+      for file in "${files[@]}"; do
+        trigger=$(python3 -c "
+import json, sys
+with open(sys.argv[1]) as f:
+    wf = json.load(f)
+for n in wf.get('nodes', []):
+    t = n['type']
+    if t in ('n8n-nodes-base.webhook', 'n8n-nodes-base.scheduleTrigger'):
+        print(t.split('.')[-1])
+        break
+else:
+    print('sub')
+" "$file")
+        if [ "$trigger" = "$priority" ]; then
+          sorted_files+=("$file")
+        fi
+      done
+    done
+    files=("${sorted_files[@]}")
   fi
 
   echo "${verb} ${#files[@]} workflow(s) [${ENV}]..."
@@ -466,6 +594,27 @@ if [ "$COMMAND" = "publish" ] || [ "$COMMAND" = "unpublish" ]; then
       continue
     fi
 
+    # Never auto-activate entry-point workflows unless --force-activate is set
+    if [ "$COMMAND" = "publish" ] && [ "$FORCE_ACTIVATE" = false ]; then
+      wf_trigger=$(python3 -c "
+import json, sys
+with open(sys.argv[1]) as f:
+    wf = json.load(f)
+for n in wf.get('nodes', []):
+    t = n['type']
+    if t in ('n8n-nodes-base.webhook', 'n8n-nodes-base.scheduleTrigger'):
+        print(t.split('.')[-1])
+        break
+else:
+    print('sub')
+" "$file")
+      if [ "$wf_trigger" != "sub" ]; then
+        echo "SKIPPED (${wf_trigger} — use --force-activate)"
+        skipped=$((skipped + 1))
+        continue
+      fi
+    fi
+
     # Check current state
     current_active=$(echo "$existing_map" | awk -F'\t' -v name="$workflow_name" '$2 == name { print $3; exit }')
     if [ "$COMMAND" = "publish" ] && [ "$current_active" = "True" ]; then
@@ -483,11 +632,22 @@ if [ "$COMMAND" = "publish" ] || [ "$COMMAND" = "unpublish" ]; then
     else
       endpoint="deactivate"
     fi
-    http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+    response_body=$(curl -s -w "\n%{http_code}" \
       -X POST "${N8N_API_URL}/api/v1/workflows/${existing_id}/${endpoint}" \
       -H "X-N8N-API-KEY: ${N8N_API_KEY}")
+    http_code=$(echo "$response_body" | tail -1)
 
+    # n8n may return non-200 even on success (e.g. webhook workflows).
+    # Fallback: check response body for actual active state.
     if [ "$http_code" = "200" ]; then
+      echo "${past} (id: $existing_id)"
+      changed=$((changed + 1))
+    elif [ "$COMMAND" = "publish" ] && python3 -c "
+import sys, json
+data = sys.stdin.read().rsplit('\n', 1)
+d = json.loads(data[0])
+sys.exit(0 if d.get('active') else 1)
+" <<< "$response_body" 2>/dev/null; then
       echo "${past} (id: $existing_id)"
       changed=$((changed + 1))
     else
@@ -506,13 +666,14 @@ if [ "$COMMAND" = "publish" ] || [ "$COMMAND" = "unpublish" ]; then
 fi
 
 # ── Deploy mode ──────────────────────────────────────────────────
-echo "Deploying ${#files[@]} workflow(s) from ${WORKFLOW_DIR} [${ENV}]..."
-echo ""
 
 # Fetch existing workflows to match by name
 # Use python to extract name→id mapping because the n8n API response may
 # contain unescaped control characters in jsCode that break jq
 existing_map=$(fetch_name_id_map)
+
+echo "Deploying ${#files[@]} workflow(s) from ${WORKFLOW_DIR} [${ENV}]..."
+echo ""
 
 created=0
 updated=0
@@ -532,11 +693,21 @@ for file in "${files[@]}"; do
     http_code=$(curl -s "${N8N_API_URL}/api/v1/workflows/${existing_id}" \
       -H "X-N8N-API-KEY: ${N8N_API_KEY}" | \
       python3 -c "
-import sys, json
+import sys, json, re
 
 server = json.load(sys.stdin)
 with open(sys.argv[1]) as f:
     local = json.load(f)
+
+namespace = sys.argv[2]
+name_id_raw = sys.argv[3]
+
+# Build name→id map from existing workflows
+name_id_map = {}
+for line in name_id_raw.strip().split('\n'):
+    if '\t' in line:
+        wid, wname = line.split('\t', 1)
+        name_id_map[wname] = wid
 
 # Build lookup from server nodes by name
 server_nodes = {n['name']: n for n in server.get('nodes', [])}
@@ -552,11 +723,27 @@ for node in local.get('nodes', []):
         if 'webhookId' in sn:
             node['webhookId'] = sn['webhookId']
 
+# Remap sub-workflow IDs inline
+for node in local.get('nodes', []):
+    if node['type'] != 'n8n-nodes-base.executeWorkflow':
+        continue
+    match = re.match(r'(WF-\d+\w*)', node['name'])
+    if not match:
+        continue
+    wf_prefix = match.group(1)
+    for sname, sid in name_id_map.items():
+        if '[' + namespace + ']' in sname and sname.split(']')[-1].strip().startswith(wf_prefix + ':'):
+            params = node.get('parameters', {})
+            wid = params.get('workflowId', {})
+            if isinstance(wid, dict):
+                wid['value'] = sid
+            break
+
 for key in ('active','id','versionId','tags','meta','updatedAt','createdAt'):
     local.pop(key, None)
 
 json.dump(local, sys.stdout, ensure_ascii=False)
-" "$file" | \
+" "$file" "$NAMESPACE" "$existing_map" | apply_workflow_vars | \
       curl -s -o /dev/null -w "%{http_code}" \
       -X PUT "${N8N_API_URL}/api/v1/workflows/${existing_id}" \
       -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
@@ -573,6 +760,7 @@ json.dump(local, sys.stdout, ensure_ascii=False)
   else
     # Create new workflow (POST) — pipe jq directly to curl to preserve JSON integrity
     http_code=$(jq 'del(.active, .id, .versionId, .tags, .meta, .updatedAt, .createdAt)' "$file" | \
+      apply_workflow_vars | \
       curl -s -o /dev/null -w "%{http_code}" \
       -X POST "${N8N_API_URL}/api/v1/workflows" \
       -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
@@ -592,8 +780,8 @@ done
 echo ""
 echo "Done: $created created, $updated updated, $failed failed (${#files[@]} total)"
 
-# ── Pass 2: Sub-workflow ID remapping ──────────────────────────────
-if [ "$failed" -eq 0 ] && [ ${#files[@]} -gt 1 ]; then
+# ── Pass 2: Sub-workflow ID remapping (needed after POST/create) ───
+if [ "$created" -gt 0 ] && [ ${#files[@]} -gt 1 ]; then
   remap_subworkflow_ids "$NAMESPACE" "${files[@]}"
 fi
 

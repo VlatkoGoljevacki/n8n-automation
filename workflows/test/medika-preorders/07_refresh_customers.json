@@ -17,7 +17,7 @@
     },
     {
       "parameters": {
-        "url": "={{ $env.MEDIKA_ERP_URL + '/api/Customers2' }}",
+        "url": "={{ $env.MEDIKA_ERP_URL_TEST + '/api/Customers2' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -72,10 +72,10 @@
         "operation": "upsert",
         "dataTableId": {
           "__rl": true,
-          "value": "N4zPWowOH9YJTPUI",
+          "value": "%%DT_CUSTOMERS_ID%%",
           "mode": "list",
           "cachedResultName": "Customers",
-          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/N4zPWowOH9YJTPUI"
+          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/%%DT_CUSTOMERS_ID%%"
         },
         "matchType": "allConditions",
         "filters": {

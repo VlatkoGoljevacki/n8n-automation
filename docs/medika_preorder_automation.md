@@ -26,10 +26,10 @@ Medika (pharmaceutical distributor) needs to automate processing of pre-order em
 ```
 WF-00: Error Handler         (Error Trigger → email notification → audit log)
 WF-01: Orchestrator           (Microsoft Outlook Trigger → calls WF-02..06 in sequence)
-WF-02: Sender Validation      (validate sender email → check pharmacy auth)
+WF-02: Sender Validation      [DEPRECATED] (validate sender email → check pharmacy auth)
 WF-03: XLSX Parser            (multi-sheet parsing, rule-based column detection + AI fallback)
 WF-04: Data Validator          (validate required fields, flag issues)
-WF-05: Approval Gate          (email + Wait form → manual approve/reject)
+WF-05: Send Order Notification (email notification after order submission)
 WF-06: Order Submitter        (POST to Medika Order API)
 ```
 
@@ -42,7 +42,7 @@ WF-06: Order Submitter        (POST to Medika Order API)
             (parallel, fire-and-forget)                                                  ↓
                                                                               [Data Validator]
                                                                                      ↓
-                                                                          [Approval Gate (HITL)]
+                                                                          [Send Order Notification]
                                                                             ↓              ↓
                                                                       [Submit Order]   [Rejected]
                                                                             ↓              ↓
@@ -83,11 +83,13 @@ Each sub-workflow has "Continue On Fail" enabled at the orchestrator level, so f
   6. Check attachments exist — if none → Move to Error
   7. Call WF-03 (XLSX parser) — if parse fails → Move to Error
   8. Call WF-04 (data validation) — cross-reference against customer lookup
-  9. Call WF-05 (approval gate) — execution pauses here
+  9. Call WF-05 (send order notification)
   10. If approved: call WF-06 (submit order) → Move to Processed
   11. If rejected: → Move to Processed
 
-## WF-02: Sender Validation
+## WF-02: Sender Validation [DEPRECATED]
+
+> **Deprecated.** Sender validation logic has been folded into the orchestrator. This workflow is kept for reference only.
 
 - **Input**: `senderEmail`, `emailSubject`
 - **Phase 1 (monolith)**: Code node checks against a knowledge database of approved senders + pharmacy/customer mappings (see [Knowledge Database](#knowledge-database) below)
@@ -225,7 +227,7 @@ This reduces parsing complexity over time. The system works without it, but adop
   - Lines with only `warnings` → `valid: true` → highlighted in approval form for review
 - **On issues**: Invalid lines appear in the approval form (WF-05) for the approver to review.
 
-## WF-05: Approval Gate
+## WF-05: Send Order Notification
 
 - **Pattern**: Wait node with "Resume: On Form Submitted" (HITL pattern)
 - **Flow**:
@@ -664,10 +666,10 @@ A demo-ready system with a test inbox, mock APIs, and AI parsing is achievable i
 | 1 | Infra setup (docker-compose, test email) | 1h | 0.25h | docker-compose, .env, .gitignore updated. Deploy script, credentials README. |
 | 2 | WF-00: Error handler | 0.5h | 1h | 3 nodes: Error Trigger → Format Context → Send Email (Microsoft Outlook via Graph API). Most time on Azure AD OAuth2 setup: audience type gotcha, SMTP auth dead for personal accounts, redirect URI. |
 | 3 | WF-01: Orchestrator | 2-3h | 1h | Trigger + metadata extraction + attachment routing done. Most time on deploy script debugging (REST API, read-only fields, bash arithmetic). Sub-workflow wiring TBD as we build each one. |
-| 4 | WF-02: Sender validation | 1h | 0.5h | Hardcoded approved senders + domain fallback. Passthrough trigger, data context fix. |
+| 4 | WF-02: Sender validation [DEPRECATED] | 1h | 0.5h | Hardcoded approved senders + domain fallback. Passthrough trigger, data context fix. |
 | 5 | WF-03: XLSX parser + AI fallback | 5-7h | 0.5h | Rule-based column detection + Claude API fallback. JSON created, not yet e2e tested. |
 | 6 | WF-04: Data validator + customer lookup | 1-1.5h | 0.5h | Validates required fields, cross-references Customers2 registry. |
-| 7 | WF-05: Approval gate (Wait form) | 2-3h | 0.25h | Wait form + email summary + decision routing. |
+| 7 | WF-05: Send Order Notification | 2-3h | 0.25h | Wait form + email summary + decision routing. |
 | 8 | WF-06: Order submitter (mock) | 1h | 0.25h | Build payload → HTTP POST → process response. |
 | 9 | Orchestrator wiring (WF-03→06) | — | 0.5h | Replace TODO NoOps, add Prepare Input nodes, binary re-attachment. |
 | 10 | Deploy script fixes | — | 1h | .env export, jq control chars, JSON body corruption, PUT vs POST. |
@@ -713,7 +715,7 @@ workflows/medika_preorder_01_orchestrator.json
 workflows/medika_preorder_02_sender_validation.json
 workflows/medika_preorder_03_xlsx_parser.json
 workflows/medika_preorder_04_article_validator.json
-workflows/medika_preorder_05_approval_gate.json
+workflows/medika_preorder_05_send_order_notification.json
 workflows/medika_preorder_06_order_submitter.json
 workflows/medika_preorder_template.xlsx
 ```
