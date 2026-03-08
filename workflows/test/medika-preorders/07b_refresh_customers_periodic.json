@@ -1,0 +1,340 @@
+{
+  "name": "[medika-preorders-test] WF-07b: Refresh Customers (Periodic)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 3 * * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "name": "Schedule (Daily 3AM)",
+      "id": "317a9ea1-fc21-482b-a985-1362ff50dddc"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f7b-tok-001",
+              "name": "tokenType",
+              "value": "medika_erp",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ],
+      "name": "Set Token Type",
+      "id": "64866c4b-7834-4498-abd9-c39947111935"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "a3WFhbGvOKzV81xE"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        480,
+        0
+      ],
+      "name": "WF-00b: Get ERP Token",
+      "onError": "continueRegularOutput",
+      "id": "bc119f1d-305c-4704-980a-dc5a9de4c31b"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.MEDIKA_ERP_URL_TEST + '/api/Customers2' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.accessToken }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        0
+      ],
+      "name": "Fetch Customers API",
+      "id": "bfeea282-4ff6-4b97-874d-2d8bcf10b813"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Flatten customers into one row per delivery place (denormalized)\nconst items = $input.all();\nconst rows = [];\n\nfor (const item of items) {\n  const c = item.json;\n  if (!c.DeliveryPlaces || c.DeliveryPlaces.length === 0) continue;\n\n  for (const dp of c.DeliveryPlaces) {\n    rows.push({\n      json: {\n        deliveryPlaceId: String(dp.ID),\n        customerId: String(c.ID),\n        customerName: c.Name || (c.Name1 + ' ' + (c.Name2 || '')).trim(),\n        name: dp.Name || (dp.Name1 + ' ' + (dp.Name2 || '')).trim(),\n        oib: c.OIB || '',\n        city: dp.City || '',\n        postCode: dp.PostCode || '',\n        street: dp.Street || ''\n      }\n    });\n  }\n}\n\nif (rows.length === 0) {\n  throw new Error('No delivery places found in ERP response');\n}\n\nreturn rows;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ],
+      "name": "Flatten Delivery Places",
+      "id": "4a9c5b39-5fe3-4a7d-815a-752b5a21adc8"
+    },
+    {
+      "parameters": {
+        "batchSize": 500,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1248,
+        0
+      ],
+      "name": "Batch 500",
+      "id": "c8a1b018-4b0f-466a-bccd-71e74efd1aec"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "%%DT_CUSTOMERS_ID%%",
+          "mode": "list",
+          "cachedResultName": "Customers",
+          "cachedResultUrl": "/projects/hrbLY7WdX4PPEv0o/datatables/%%DT_CUSTOMERS_ID%%"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "customerId",
+              "keyValue": "={{ $json.customerId }}"
+            },
+            {
+              "keyName": "deliveryPlaceId",
+              "keyValue": "={{ $json.deliveryPlaceId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "deliveryPlaceId": "={{ $json.deliveryPlaceId }}",
+            "customerId": "={{ $json.customerId }}",
+            "customerName": "={{ $json.customerName }}",
+            "name": "={{ $json.name }}",
+            "oib": "={{ $json.oib }}",
+            "city": "={{ $json.city }}",
+            "postCode": "={{ $json.postCode }}",
+            "street": "={{ $json.street }}"
+          },
+          "matchingColumns": [
+            "deliveryPlaceId"
+          ],
+          "schema": [
+            {
+              "id": "deliveryPlaceId",
+              "displayName": "deliveryPlaceId",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "customerId",
+              "displayName": "customerId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "customerName",
+              "displayName": "customerName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "oib",
+              "displayName": "oib",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "city",
+              "displayName": "city",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "postCode",
+              "displayName": "postCode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "street",
+              "displayName": "street",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1552,
+        16
+      ],
+      "name": "DT: Upsert Customers",
+      "id": "c6c5a5eb-7d39-4c9e-bed4-4152cf8d685e"
+    }
+  ],
+  "connections": {
+    "Schedule (Daily 3AM)": {
+      "main": [
+        [
+          {
+            "node": "Set Token Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Token Type": {
+      "main": [
+        [
+          {
+            "node": "WF-00b: Get ERP Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-00b: Get ERP Token": {
+      "main": [
+        [
+          {
+            "node": "Fetch Customers API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Customers API": {
+      "main": [
+        [
+          {
+            "node": "Flatten Delivery Places",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flatten Delivery Places": {
+      "main": [
+        [
+          {
+            "node": "Batch 500",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch 500": {
+      "main": [
+        [],
+        [
+          {
+            "node": "DT: Upsert Customers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DT: Upsert Customers": {
+      "main": [
+        [
+          {
+            "node": "Batch 500",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": []
+}

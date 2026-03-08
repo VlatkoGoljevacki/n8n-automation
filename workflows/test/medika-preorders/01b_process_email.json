@@ -403,7 +403,8 @@
       ],
       "id": "b1000000-0000-4000-8000-000000000021",
       "name": "WF-03: Parse XLSX",
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
     },
     {
       "parameters": {

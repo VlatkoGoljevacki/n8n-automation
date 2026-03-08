@@ -17,7 +17,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Output one item per unique delivery place ID for individual DT lookups\nconst input = $input.first().json;\nconst orderLines = input.orderLines || [];\nconst accessToken = input.accessToken;\n\nconst ids = [...new Set(orderLines.map(l => l.pharmacyId).filter(Boolean))];\n\n// Output one item per delivery place ID\nreturn ids.map(id => ({ json: { deliveryPlaceId: id, accessToken, parseResult: input } }));"
+        "jsCode": "// Output one item per unique delivery place ID for individual DT lookups\nconst input = $input.first().json;\nconst orderLines = input.orderLines || [];\nconst accessToken = input.accessToken;\n\nconst ids = [...new Set(orderLines.map(l => l.pharmacyId).filter(Boolean))];\n\n// Output one item per delivery place ID\nreturn ids.map(id => ({ json: { deliveryPlaceId: String(id), accessToken, parseResult: input } }));"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -314,7 +314,8 @@
       ],
       "id": "c9000000-0000-4000-8000-000000000028",
       "name": "WF-06: Submit Order",
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -448,8 +449,7 @@
                 ],
                 "combinator": "and"
               },
-              "renameOutput": true,
-              "outputLabel": "All Valid"
+              "renameOutput": true
             },
             {
               "conditions": {
@@ -470,8 +470,7 @@
                 ],
                 "combinator": "and"
               },
-              "renameOutput": true,
-              "outputLabel": "Partial"
+              "renameOutput": true
             }
           ]
         },
@@ -630,7 +629,6 @@
     },
     {
       "parameters": {
-        "mode": "runOnceForAllItems",
         "jsCode": "// Build Graph API sendMail payload for error notification\nconst config = $('Set Config').first().json;\nconst subInput = $('Sub-Workflow Input').first().json;\nconst binary = $('Sub-Workflow Input').first().binary || {};\nconst binaryKeys = Object.keys(binary);\n\nconst errorMsg = config.error || 'Unknown error';\nconst emailSubject = subInput.emailSubject || 'N/A';\nconst senderEmail = subInput.senderEmail || 'unknown';\nconst emailBodyHtml = subInput.emailBodyHtml || '';\n\nlet html = `<div style=\"padding:12px 16px;background:#f8d7da;color:#721c24;border-radius:6px;margin-bottom:16px;font-weight:bold;\">`;\nhtml += `ORDER PROCESSING ERROR`;\nhtml += `</div>`;\nhtml += `<p><strong>Error:</strong> ${errorMsg}</p>`;\nhtml += `<p><strong>From:</strong> ${senderEmail}<br>`;\nhtml += `<strong>Subject:</strong> ${emailSubject}</p>`;\n\nif (emailBodyHtml) {\n  html += `<hr style=\"margin:20px 0;\">`;\n  html += `<h3>Original Email</h3>`;\n  html += `<blockquote style=\"border-left:3px solid #ccc;padding:8px 16px;margin:8px 0;color:#555;\">${emailBodyHtml}</blockquote>`;\n}\n\nconst message = {\n  subject: `WF-09 Error: ${emailSubject}`,\n  body: { contentType: 'HTML', content: html },\n  toRecipients: [{ emailAddress: { address: config.notificationEmail } }]\n};\n\nif (binaryKeys.length > 0) {\n  message.attachments = binaryKeys.map(key => {\n    const att = binary[key];\n    return {\n      '@odata.type': '#microsoft.graph.fileAttachment',\n      name: att.fileName || 'attachment',\n      contentType: att.mimeType || 'application/octet-stream',\n      contentBytes: att.data\n    };\n  });\n}\n\nreturn [{ json: { sendMailPayload: { message } } }];\n"
       },
       "type": "n8n-nodes-base.code",
@@ -782,55 +780,11 @@
       "main": [
         [
           {
-            "node": "WF-07: Refresh Customers",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
             "node": "Prepare Validator Input",
             "type": "main",
             "index": 0
           }
-        ]
-      ]
-    },
-    "WF-07: Refresh Customers": {
-      "main": [
-        [
-          {
-            "node": "Restore Order IDs",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Restore Order IDs": {
-      "main": [
-        [
-          {
-            "node": "Re-lookup Delivery Places",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Re-lookup Delivery Places": {
-      "main": [
-        [
-          {
-            "node": "Rebuild Customer Lookup",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Rebuild Customer Lookup": {
-      "main": [
+        ],
         [
           {
             "node": "Prepare Validator Input",
@@ -1002,6 +956,39 @@
         [
           {
             "node": "Move to Error (Validation)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-07: Refresh Customers": {
+      "main": [
+        [
+          {
+            "node": "Restore Order IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Order IDs": {
+      "main": [
+        [
+          {
+            "node": "Re-lookup Delivery Places",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Re-lookup Delivery Places": {
+      "main": [
+        [
+          {
+            "node": "Rebuild Customer Lookup",
             "type": "main",
             "index": 0
           }
