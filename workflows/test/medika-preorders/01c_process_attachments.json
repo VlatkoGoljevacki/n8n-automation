@@ -1,0 +1,659 @@
+{
+  "name": "[medika-preorders-test] WF-01c: Process Attachments",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        400,
+        -208
+      ],
+      "name": "WF-01c: Entry",
+      "id": "9d10f56f-56a5-4a10-927d-c39589e51201"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Store metadata in staticData for post-loop nodes\nconst staticData = $getWorkflowStaticData('global');\nconst first = $input.first().json;\nstaticData.orderResults = [];\nstaticData.emailId = first.emailId;\nstaticData.senderEmail = first.senderEmail;\nstaticData.emailSubject = first.emailSubject;\nstaticData.config = first.config;\n\nreturn $input.all();\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        -208
+      ],
+      "name": "Initialize",
+      "id": "3dff1fd3-c017-4e93-afbf-d1236e923830"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "aPemJbybULEIfOEP"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        0
+      ],
+      "name": "WF-03: Parse XLSX",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "id": "6c118881-7abd-4631-bbb4-a320a28a2d2f"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "d1000003-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.matched }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        0
+      ],
+      "name": "Parse Succeeded?",
+      "id": "a51b0aac-2dfb-4d1c-89af-953e1ee21edd"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Record parse failure and loop back to SplitInBatches\nconst staticData = $getWorkflowStaticData('global');\nconst loopItem = $('Loop Over XLSX Files').first().json;\nconst parseResult = $input.first().json || {};\n\nstaticData.orderResults = staticData.orderResults || [];\nstaticData.orderResults.push({\n  xlsxFileName: loopItem.xlsxFileName || '',\n  xlsxIndex: loopItem.xlsxIndex,\n  success: false,\n  error: parseResult.error || 'XLSX parse failed'\n});\n\nreturn [{ json: { recorded: true } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        128
+      ],
+      "name": "Record Failure",
+      "id": "304c49b8-470c-4796-85ca-65f51546a7ff"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Consolidate data for WF-09 — XLSX loop iteration\nconst parseResult = $input.first().json;\nconst loopItem = $('Loop Over XLSX Files').first().json;\nconst loopBinary = $('Loop Over XLSX Files').first().binary || {};\nconst binary = {};\nif (loopBinary.data) binary.data = loopBinary.data;\n\nreturn [{\n  json: {\n    ...parseResult,\n    emailId: loopItem.emailId,\n    senderEmail: loopItem.senderEmail,\n    emailSubject: loopItem.emailSubject,\n    receivedAt: loopItem.receivedAt,\n    config: loopItem.config,\n    accessToken: loopItem.accessToken,\n    emailBody: loopItem.emailBody,\n    emailBodyHtml: (loopItem.emailBody || {}).content || '',\n    skipEmailMove: true,\n    xlsxFileName: loopItem.xlsxFileName || ''\n  },\n  binary\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        -80
+      ],
+      "name": "Prepare Order Input",
+      "id": "e957b8fe-5c82-4802-ab33-42954465a129"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "DpdMh7gSlEVdcCms"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1920,
+        -80
+      ],
+      "name": "WF-09: Process Order",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "id": "3eb97232-225e-4137-9ae8-81ba3186ec0f"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        880,
+        -208
+      ],
+      "name": "Loop Over XLSX Files",
+      "id": "bfd217fb-d075-4664-9db5-e06a7bb32d2f"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Record successful order processing and loop back\nconst staticData = $getWorkflowStaticData('global');\nconst loopItem = $('Loop Over XLSX Files').first().json;\nconst wf09Result = $input.first().json || {};\n\nstaticData.orderResults = staticData.orderResults || [];\nstaticData.orderResults.push({\n  xlsxFileName: loopItem.xlsxFileName || '',\n  xlsxIndex: loopItem.xlsxIndex,\n  success: true,\n  orderResult: wf09Result\n});\n\nreturn [{ json: { recorded: true } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        -80
+      ],
+      "name": "Record Success",
+      "id": "67c8788f-d17f-480d-b07d-cb40dffd9ebe"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate all XLSX processing results after loop completes\nconst staticData = $getWorkflowStaticData('global');\nconst results = staticData.orderResults || [];\n\nconst successCount = results.filter(r => r.success).length;\nconst failCount = results.filter(r => !r.success).length;\nconst totalCount = results.length;\n\nlet overallStatus;\nif (failCount === 0) overallStatus = 'success';\nelse if (successCount === 0) overallStatus = 'error';\nelse overallStatus = 'partial';\n\ndelete staticData.orderResults;\n\nreturn [{\n  json: {\n    emailId: staticData.emailId,\n    senderEmail: staticData.senderEmail,\n    emailSubject: staticData.emailSubject,\n    config: staticData.config,\n    overallStatus,\n    successCount,\n    failCount,\n    totalCount,\n    results,\n    hasAnySuccess: successCount > 0\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        -480
+      ],
+      "name": "Aggregate Results",
+      "id": "cc4f7191-378b-4b44-8e75-9b78a920f0a3"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "final-token-001",
+              "name": "tokenType",
+              "value": "graph_api",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1440,
+        -480
+      ],
+      "name": "Set Token (Final)",
+      "id": "b5a89383-7610-4da4-bd73-2c8af0361c0a"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "a3WFhbGvOKzV81xE"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1680,
+        -480
+      ],
+      "name": "Refresh Token (Final)",
+      "id": "af213f0d-9899-4de7-94b9-35b4257e5de6"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ_TEST }}/messages/{{ $('Aggregate Results').first().json.emailId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Refresh Token (Final)').first().json.accessToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"isRead\": true }",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2592,
+        -464
+      ],
+      "name": "Mark as Read (Final)",
+      "id": "0545d0f7-03f0-481c-b186-0e563247357d",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-any-success-001",
+              "leftValue": "={{ $('Aggregate Results').first().json.hasAnySuccess }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2832,
+        -464
+      ],
+      "name": "Has Any Success?",
+      "id": "c4227674-131f-4ada-be06-adb489c8bad8"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ_TEST }}/messages/{{ $('Aggregate Results').first().json.emailId }}/move",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Refresh Token (Final)').first().json.accessToken }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"destinationId\": \"%%MS_FOLDER_PROCESSED_ID%%\" }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3088,
+        -592
+      ],
+      "name": "Move to Processed (Final)",
+      "id": "a4b1e58d-6733-4d5a-9fd2-9fd30f1c4f8a",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_READ_TEST }}/messages/{{ $('Aggregate Results').first().json.emailId }}/move",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Refresh Token (Final)').first().json.accessToken }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"destinationId\": \"%%MS_FOLDER_ERROR_ID%%\" }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3088,
+        -368
+      ],
+      "name": "Move to Error (Final)",
+      "id": "e4aefea5-1ffc-4ffd-a17d-d17bb5be7212",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-failures-001",
+              "leftValue": "={{ $('Aggregate Results').first().json.failCount }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        -480
+      ],
+      "name": "Has Failures?",
+      "id": "9281a515-f698-435d-8e7a-962ed892ef05"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build warning email summarizing XLSX processing failures\nconst agg = $('Aggregate Results').first().json;\nconst config = agg.config || {};\nconst failures = agg.results.filter(r => !r.success);\n\nlet failureRows = '';\nfor (const f of failures) {\n  failureRows += '<tr>'\n    + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + (f.xlsxFileName || 'Unknown') + '</td>'\n    + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + (f.error || 'Unknown error') + '</td>'\n    + '</tr>';\n}\n\nconst isTotal = agg.successCount === 0;\nconst heading = isTotal ? 'Neuspjeh obrade narudžbe' : 'Djelomični neuspjeh obrade narudžbe';\nconst headingColor = isTotal ? '#c0392b' : '#d35400';\n\nconst html = '<div style=\"font-family: Arial, sans-serif; max-width: 600px;\">'\n  + '<h2 style=\"color: ' + headingColor + ';\">' + heading + '</h2>'\n  + '<p>' + agg.successCount + ' od ' + agg.totalCount + ' XLSX datoteka uspješno obrađeno. '\n  + agg.failCount + ' neuspjelo:</p>'\n  + '<table style=\"border-collapse: collapse; width: 100%; margin: 16px 0;\">'\n  + '<tr><th style=\"padding: 8px; border: 1px solid #ddd; text-align: left;\">Datoteka</th>'\n  + '<th style=\"padding: 8px; border: 1px solid #ddd; text-align: left;\">Greška</th></tr>'\n  + failureRows\n  + '</table>'\n  + '<table style=\"border-collapse: collapse; width: 100%; margin: 16px 0;\">'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">Od</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + agg.senderEmail + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">Predmet</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + agg.emailSubject + '</td></tr>'\n  + '</table>'\n  + '</div>';\n\nconst subjectPrefix = isTotal ? '[Medika] Neuspjeh' : '[Medika] Djelomični neuspjeh';\nconst subject = subjectPrefix + ' - ' + agg.emailSubject;\nconst message = {\n  subject,\n  body: { contentType: 'HTML', content: html },\n  toRecipients: (config.notifyEmail || '').split(',').map(e => ({ emailAddress: { address: e.trim() } }))\n};\n\nreturn [{ json: { sendMailPayload: { message } } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        -640
+      ],
+      "name": "Build Loop Warning",
+      "id": "2a3d4a22-9f84-4259-9b6a-e741628624a5"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $env.MS_GRAPH_MAILBOX_SEND_TEST }}/sendMail",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Refresh Token (Final)').first().json.accessToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Build Loop Warning').first().json.sendMailPayload) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2400,
+        -640
+      ],
+      "name": "Send Loop Warning",
+      "id": "9374ebae-9c4e-44f1-b1e5-3f02bf3ebb1c",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "WF-01c: Entry": {
+      "main": [
+        [
+          {
+            "node": "Initialize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize": {
+      "main": [
+        [
+          {
+            "node": "Loop Over XLSX Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over XLSX Files": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "WF-03: Parse XLSX",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-03: Parse XLSX": {
+      "main": [
+        [
+          {
+            "node": "Parse Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Order Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Order Input": {
+      "main": [
+        [
+          {
+            "node": "WF-09: Process Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-09: Process Order": {
+      "main": [
+        [
+          {
+            "node": "Record Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Success": {
+      "main": [
+        [
+          {
+            "node": "Loop Over XLSX Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Failure": {
+      "main": [
+        [
+          {
+            "node": "Loop Over XLSX Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Results": {
+      "main": [
+        [
+          {
+            "node": "Set Token (Final)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Token (Final)": {
+      "main": [
+        [
+          {
+            "node": "Refresh Token (Final)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refresh Token (Final)": {
+      "main": [
+        [
+          {
+            "node": "Has Failures?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Failures?": {
+      "main": [
+        [
+          {
+            "node": "Build Loop Warning",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark as Read (Final)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Loop Warning": {
+      "main": [
+        [
+          {
+            "node": "Send Loop Warning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Loop Warning": {
+      "main": [
+        [
+          {
+            "node": "Mark as Read (Final)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark as Read (Final)": {
+      "main": [
+        [
+          {
+            "node": "Has Any Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Any Success?": {
+      "main": [
+        [
+          {
+            "node": "Move to Processed (Final)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Move to Error (Final)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": []
+}

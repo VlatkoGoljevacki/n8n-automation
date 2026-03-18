@@ -281,7 +281,10 @@
         208
       ],
       "id": "f0b00000-0000-4000-8000-000000000006",
-      "name": "Fetch Token"
+      "name": "Fetch Token",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {

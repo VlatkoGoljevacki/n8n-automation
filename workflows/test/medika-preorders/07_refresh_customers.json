@@ -38,7 +38,10 @@
         0
       ],
       "id": "f7000000-0000-4000-8000-000000000002",
-      "name": "Fetch Customers API"
+      "name": "Fetch Customers API",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {

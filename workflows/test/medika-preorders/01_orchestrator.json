@@ -1,5 +1,5 @@
 {
-  "name": "[medika-preorders-test] WF-01: Orchestrator",
+  "name": "[medika-preorders-test] WF-01: Initiator",
   "active": false,
   "nodes": [
     {
@@ -34,13 +34,13 @@
             {
               "id": "b1-set-002",
               "name": "emailBatchSize",
-              "value": 9,
+              "value": 3,
               "type": "number"
             },
             {
               "id": "b1-set-003",
               "name": "processingBatchSize",
-              "value": 3,
+              "value": 1,
               "type": "number"
             },
             {
@@ -118,7 +118,10 @@
       ],
       "id": "b1000000-0000-4000-8000-000000000093",
       "name": "Fetch Email Batch",
-      "webhookId": "ecb89380-9fb9-480f-a9df-49fb1fff8ddf"
+      "webhookId": "ecb89380-9fb9-480f-a9df-49fb1fff8ddf",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -145,7 +148,7 @@
         -320
       ],
       "id": "b1000000-0000-4000-8000-000000000095",
-      "name": "Batch of 3"
+      "name": "Batch Emails"
     },
     {
       "parameters": {
@@ -172,7 +175,10 @@
         -320
       ],
       "id": "b1000000-0000-4000-8000-000000000100",
-      "name": "Move to Processing"
+      "name": "Move to Processing",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -190,7 +196,10 @@
         -320
       ],
       "id": "b1000000-0000-4000-8000-000000000111",
-      "name": "Trigger Processing"
+      "name": "Trigger Processing",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -245,14 +254,14 @@
       "main": [
         [
           {
-            "node": "Batch of 3",
+            "node": "Batch Emails",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Batch of 3": {
+    "Batch Emails": {
       "main": [
         [],
         [
@@ -290,7 +299,7 @@
       "main": [
         [
           {
-            "node": "Batch of 3",
+            "node": "Batch Emails",
             "type": "main",
             "index": 0
           }

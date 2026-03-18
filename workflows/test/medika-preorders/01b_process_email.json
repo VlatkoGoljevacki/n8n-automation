@@ -1,5 +1,5 @@
 {
-  "name": "[medika-preorders-test] WF-01b: Process Email",
+  "name": "[medika-preorders-test] WF-01b: Orchestrator",
   "active": false,
   "nodes": [
     {
@@ -11,7 +11,7 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        512,
+        464,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000200",
@@ -35,7 +35,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        736,
+        688,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000150",
@@ -53,7 +53,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        944,
+        896,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000151",
@@ -78,11 +78,14 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1152,
+        1104,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000152",
-      "name": "Fetch Email Raw"
+      "name": "Fetch Email Raw",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -91,7 +94,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1360,
+        1312,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000104",
@@ -111,7 +114,7 @@
             {
               "id": "cfg-005",
               "name": "defaultDiscountPerc",
-              "value": "0",
+              "value": 0,
               "type": "number"
             },
             {
@@ -123,13 +126,13 @@
             {
               "id": "cfg-007",
               "name": "customerCacheTTLHours",
-              "value": "24",
+              "value": 24,
               "type": "number"
             },
             {
               "id": "cfg-008",
               "name": "notifyEmail",
-              "value": "vlatko.goljevacki@gmail.com",
+              "value": "vlatko.goljevacki@gmail.com,mislav.cotic@gmail.com,vanja.petric@medika.hr",
               "type": "string"
             },
             {
@@ -163,7 +166,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1552,
+        1504,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000040",
@@ -181,7 +184,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        1776,
+        1728,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000095",
@@ -229,7 +232,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        2032,
+        1984,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000002",
@@ -237,12 +240,12 @@
     },
     {
       "parameters": {
-        "jsCode": "// Check binary attachments for XLSX/XLS files\nconst binary = $('Fetch Email').first().binary || {};\nconst binaryKeys = Object.keys(binary);\nlet hasXlsx = false;\nlet xlsxCount = 0;\nconst xlsxFiles = [];\n\n// Order-related keywords in filenames (Croatian + English)\nconst ORDER_KEYWORDS = ['prednarudžba', 'prednarudzba', 'narudžba', 'narudzba', 'narudžbe',\n  'narudžbenica', 'narudzbenica', 'transfer order', 'order', 'prednarudžbe', 'prednarudzbe',\n  'to ', 'to-', 'to_'];\n\nfor (const key of binaryKeys) {\n  const b = binary[key];\n  const fileName = (b.fileName || '').toLowerCase();\n  const mimeType = (b.mimeType || '').toLowerCase();\n  if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') ||\n      mimeType.includes('spreadsheetml') || mimeType.includes('ms-excel')) {\n    hasXlsx = true;\n    xlsxCount++;\n    xlsxFiles.push({ key, fileName: b.fileName || key, fileNameLower: fileName });\n  }\n}\n\n// If multiple XLSX, pick the one most likely to be an order by filename\nlet selectedXlsxKey = null;\nif (xlsxCount > 1) {\n  for (const f of xlsxFiles) {\n    if (ORDER_KEYWORDS.some(kw => f.fileNameLower.includes(kw))) {\n      selectedXlsxKey = f.key;\n      break;\n    }\n  }\n  // If no keyword match, use the first XLSX\n  if (!selectedXlsxKey) selectedXlsxKey = xlsxFiles[0].key;\n} else if (xlsxCount === 1) {\n  selectedXlsxKey = xlsxFiles[0].key;\n}\n\n// Prepare plain-text input for AI classification\nconst emailBody = $('Fetch Email').first().json.body || {};\nconst bodyHtml = emailBody.content || '';\nconst bodyText = bodyHtml.replace(/<[^>]*>/g, '').substring(0, 2000);\nconst subject = $input.first().json.emailSubject || '';\nconst xlsxInfo = xlsxFiles.length > 0 ? '\\n\\nAttached XLSX: ' + xlsxFiles.map(f => f.fileName).join(', ') : '';\nconst aiClassifyInput = 'Subject: ' + subject + '\\n\\nBody:\\n' + bodyText + xlsxInfo;\n\nreturn [{ json: {\n  ...$input.first().json,\n  _hasXlsx: hasXlsx,\n  _xlsxCount: xlsxCount,\n  _xlsxNames: xlsxFiles.map(f => f.fileName),\n  _selectedXlsxKey: selectedXlsxKey,\n  _aiClassifyInput: aiClassifyInput\n} }];"
+        "jsCode": "// Check binary attachments for XLSX/XLS files\nconst binary = $('Fetch Email').first().binary || {};\nconst binaryKeys = Object.keys(binary);\nlet hasXlsx = false;\nlet xlsxCount = 0;\nconst xlsxFiles = [];\n\n// Order-related keywords in filenames (Croatian + English)\nconst ORDER_KEYWORDS = ['prednarudžba', 'prednarudzba', 'narudžba', 'narudzba', 'narudžbe',\n  'narudžbenica', 'narudzbenica', 'transfer order', 'order', 'prednarudžbe', 'prednarudzbe',\n  'gratis'];\nconst ORDER_PREFIX_RE = /^to[\\s\\-_]/;\n\n// Exclusion patterns — files that are NOT orders\nconst EXCLUSION_PATTERNS = ['za provjeru', 'nalog'];\n\nfor (const key of binaryKeys) {\n  const b = binary[key];\n  const fileName = (b.fileName || '').toLowerCase();\n  const mimeType = (b.mimeType || '').toLowerCase();\n  if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') ||\n      mimeType.includes('spreadsheetml') || mimeType.includes('ms-excel')) {\n    hasXlsx = true;\n    xlsxCount++;\n    xlsxFiles.push({ key, fileName: b.fileName || key, fileNameLower: fileName });\n  }\n}\n\nfunction isOrderFilename(name) {\n  return ORDER_KEYWORDS.some(kw => name.includes(kw)) || ORDER_PREFIX_RE.test(name);\n}\n\nfunction isExcludedFilename(name) {\n  return EXCLUSION_PATTERNS.some(p => name.includes(p));\n}\n\n// For multi-XLSX: filter to order-eligible files (exclude delivery notes etc.)\nconst orderXlsxFiles = xlsxFiles.filter(f => !isExcludedFilename(f.fileNameLower));\n// If all excluded, fall back to full list to avoid losing all files\nconst finalXlsxFiles = orderXlsxFiles.length > 0 ? orderXlsxFiles : xlsxFiles;\n\n// Legacy: selectedXlsxKey for backward compatibility\nlet selectedXlsxKey = null;\nif (xlsxCount > 1) {\n  for (const f of xlsxFiles) {\n    if (isOrderFilename(f.fileNameLower)) {\n      selectedXlsxKey = f.key;\n      break;\n    }\n  }\n  if (!selectedXlsxKey) selectedXlsxKey = xlsxFiles[0].key;\n} else if (xlsxCount === 1) {\n  selectedXlsxKey = xlsxFiles[0].key;\n}\n\n// Prepare plain-text input for AI classification\nconst emailBody = $('Fetch Email').first().json.body || {};\nconst bodyHtml = emailBody.content || '';\nconst bodyText = bodyHtml.replace(/<[^>]*>/g, '').substring(0, 2000);\nconst subject = $input.first().json.emailSubject || '';\nconst xlsxInfo = xlsxFiles.length > 0 ? '\\n\\nAttached XLSX: ' + xlsxFiles.map(f => f.fileName).join(', ') : '';\nconst aiClassifyInput = 'Subject: ' + subject + '\\n\\nBody:\\n' + bodyText + xlsxInfo;\n\nreturn [{ json: {\n  ...$input.first().json,\n  _hasXlsx: hasXlsx,\n  _xlsxCount: xlsxCount,\n  _xlsxNames: xlsxFiles.map(f => f.fileName),\n  _xlsxFiles: finalXlsxFiles.map(f => ({ key: f.key, fileName: f.fileName })),\n  _selectedXlsxKey: selectedXlsxKey,\n  _aiClassifyInput: aiClassifyInput\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2272,
+        2224,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000300",
@@ -260,7 +263,7 @@
           "values": [
             {
               "role": "system",
-              "content": "You are an email classifier for a pharmaceutical company's pre-order mailbox.\nEmails are most often in Croatian but may be in any language — detect the language and interpret accordingly.\n\nDetermine if this email is a NEW pre-order submission or something else\n(complaint, follow-up, inquiry, status request, delivery issue, etc.)\n\nSigns of a valid new pre-order:\n- Contains product lists with quantities\n- Has an XLSX/spreadsheet attachment (strong signal — order data is typically in the file, not the email body)\n- Subject mentions ordering keywords (e.g. Croatian: \"prednarudžba\", \"narudžba\"; English: \"preorder\", \"order\")\n- Straightforward order submission tone\n\nSigns of a NON-order:\n- Complaints about undelivered items (e.g. \"neisporučeni\", \"undelivered\")\n- References to a previous order (e.g. \"ponavljam\", \"sent earlier\")\n- Requests for free/gratis items delivery\n- Status inquiries or general questions\n- Forwarded correspondence about existing orders\n- Internal replies from company staff (@medika.hr) confirming an order was processed\n  (e.g. \"Ispisano\", \"Napravljeno\", \"Gotovo\", \"Riješeno\" = already handled)\n- HR announcements, newsletters, or administrative notices (e.g. \"Novi član tima\")\n\nReturn ONLY raw JSON, no markdown: {\"isOrder\": true/false, \"reason\": \"brief reason\"}"
+              "content": "You are an email classifier for a pharmaceutical company's pre-order mailbox.\nEmails are most often in Croatian but may be in any language — detect the language and interpret accordingly.\n\nDetermine if this email is a NEW pre-order submission or something else\n(complaint, follow-up, inquiry, status request, delivery issue, etc.)\n\nSigns of a valid new pre-order:\n- Contains product lists with quantities\n- Has an XLSX/spreadsheet attachment (strong signal — order data is typically in the file, not the email body)\n- Subject mentions ordering keywords (e.g. Croatian: \"prednarudžba\", \"narudžba\"; English: \"preorder\", \"order\")\n- Straightforward order submission tone\n- \"Gratis\" orders with XLSX attachment are VALID orders (gratis = free promotional items, a standard order type)\n\nSigns of a NON-order:\n- Complaints about undelivered items (e.g. \"neisporučeni\", \"undelivered\")\n- References to a previous order (e.g. \"ponavljam\", \"sent earlier\")\n- Requests for gratis items delivery WITHOUT an XLSX attachment (just asking, no file)\n- Status inquiries or general questions\n- Forwarded correspondence about existing orders\n- Internal replies from company staff (@medika.hr) confirming an order was processed\n  (e.g. \"Ispisano\", \"Napravljeno\", \"Gotovo\", \"Riješeno\" = already handled)\n- HR announcements, newsletters, or administrative notices (e.g. \"Novi član tima\")\n\nReturn ONLY raw JSON, no markdown: {\"isOrder\": true/false, \"reason\": \"brief reason\"}"
             },
             {
               "content": "={{ $json._aiClassifyInput }}"
@@ -275,11 +278,14 @@
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 2.1,
       "position": [
-        2656,
+        2496,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000310",
       "name": "AI: Classify Email",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
       "credentials": {
         "openAiApi": {
           "id": "KRVpI7DXsh84tzkO",
@@ -295,7 +301,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2992,
+        2832,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000311",
@@ -327,7 +333,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        3248,
+        3088,
         -96
       ],
       "id": "b1000000-0000-4000-8000-000000000312",
@@ -359,7 +365,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        3472,
+        3312,
         -112
       ],
       "id": "b1000000-0000-4000-8000-000000000301",
@@ -367,88 +373,16 @@
     },
     {
       "parameters": {
-        "jsCode": "// Re-attach binary data from trigger and carry config\n// Put the selected XLSX attachment into the 'data' key so WF-03 parser picks it up\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\nconst classifyData = $('Classify Attachment').first().json;\n\nconst binary = $('Fetch Email').first().binary || {};\nconst binaryKeys = Object.keys(binary);\nconst renamedBinary = {};\n\n// Use the pre-selected XLSX key from Classify Attachment (handles multi-XLSX filtering)\nconst xlsxKey = classifyData._selectedXlsxKey;\n\nif (xlsxKey && binary[xlsxKey]) {\n  renamedBinary.data = binary[xlsxKey];\n  for (const key of binaryKeys) {\n    if (key !== xlsxKey) renamedBinary[key] = binary[key];\n  }\n} else if (binaryKeys.length > 0) {\n  // Fallback: use first attachment if no XLSX found\n  renamedBinary.data = binary[binaryKeys[0]];\n  for (let i = 1; i < binaryKeys.length; i++) {\n    renamedBinary[binaryKeys[i]] = binary[binaryKeys[i]];\n  }\n}\n\nreturn [{\n  json: {\n    config: config,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    emailId: emailMeta.emailId,\n    receivedAt: emailMeta.receivedAt,\n    businessCenter: config.businessCenterDefault,\n    defaultDiscountPerc: config.defaultDiscountPerc\n  },\n  binary: renamedBinary\n}];"
+        "jsCode": "// Emit one item per XLSX file for sub-workflow processing\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\nconst classifyData = $('Classify Attachment').first().json;\nconst binary = $('Fetch Email').first().binary || {};\nconst xlsxFiles = classifyData._xlsxFiles || [];\n\nconst items = [];\nfor (let i = 0; i < xlsxFiles.length; i++) {\n  const f = xlsxFiles[i];\n  const itemBinary = {};\n  if (binary[f.key]) {\n    itemBinary.data = binary[f.key];\n  }\n  items.push({\n    json: {\n      config: config,\n      senderEmail: emailMeta.senderEmail,\n      emailSubject: emailMeta.emailSubject,\n      emailId: emailMeta.emailId,\n      receivedAt: emailMeta.receivedAt,\n      businessCenter: config.businessCenterDefault,\n      defaultDiscountPerc: config.defaultDiscountPerc,\n      xlsxFileName: f.fileName,\n      xlsxIndex: i,\n      xlsxTotal: xlsxFiles.length\n    },\n    binary: itemBinary\n  });\n}\n\nif (items.length === 0) {\n  return [{ json: { error: 'No XLSX files to process' } }];\n}\n\nreturn items;\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3712,
+        3568,
         -208
       ],
       "id": "b1000000-0000-4000-8000-000000000020",
-      "name": "Prepare Parser Input"
-    },
-    {
-      "parameters": {
-        "workflowId": {
-          "__rl": true,
-          "mode": "id",
-          "value": "aPemJbybULEIfOEP"
-        },
-        "workflowInputs": {
-          "mappingMode": "defineBelow",
-          "value": {},
-          "matchingColumns": [],
-          "schema": [],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": true
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.2,
-      "position": [
-        3952,
-        -208
-      ],
-      "id": "b1000000-0000-4000-8000-000000000021",
-      "name": "WF-03: Parse XLSX",
-      "onError": "continueRegularOutput",
-      "alwaysOutputData": true
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 1
-          },
-          "conditions": [
-            {
-              "id": "d1000003-0000-4000-8000-000000000001",
-              "leftValue": "={{ $json.matched }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "true"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        4192,
-        -208
-      ],
-      "id": "b1000000-0000-4000-8000-000000000022",
-      "name": "Parse Succeeded?"
-    },
-    {
-      "parameters": {},
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [
-        4448,
-        -64
-      ],
-      "id": "b1000000-0000-4000-8000-000000000030",
-      "name": "Parse Failed"
+      "name": "Emit One Item Per XLSX"
     },
     {
       "parameters": {
@@ -457,8 +391,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3712,
-        128
+        3568,
+        240
       ],
       "id": "b1000000-0000-4000-8000-000000000302",
       "name": "Prepare Body Parser Input"
@@ -483,8 +417,8 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        3952,
-        128
+        3808,
+        240
       ],
       "id": "b1000000-0000-4000-8000-000000000303",
       "name": "WF-08: Parse Email Body",
@@ -516,21 +450,21 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        4192,
-        128
+        4048,
+        240
       ],
       "id": "b1000000-0000-4000-8000-000000000304",
       "name": "Body Parse Succeeded?"
     },
     {
       "parameters": {
-        "jsCode": "// Build warning/error notification email for admin\n// Includes full original email body and forwards attachments\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\nconst emailBody = $('Fetch Email').first().json.body || {};\nconst originalHtml = emailBody.content || '';\n\n// Detect which error branch\nconst inputData = $input.first().json;\nconst isAiNonOrder = inputData._isValidOrder === false;\nconst classifyData = $('Classify Attachment').first().json;\nconst isXlsxPath = classifyData._hasXlsx === true;\nconst isMultiXlsx = (classifyData._xlsxCount || 0) >= 2;\n\nlet title, description, errorType;\nif (isMultiXlsx) {\n  errorType = 'multiple_xlsx';\n  title = 'Multiple XLSX Attachments';\n  description = 'The email contains ' + classifyData._xlsxCount + ' spreadsheet attachments ('\n    + (classifyData._xlsxNames || []).join(', ')\n    + '). Only one spreadsheet per email is supported. '\n    + 'Please ask the sender to send one spreadsheet per email, or process manually.';\n} else if (isAiNonOrder) {\n  errorType = 'not_an_order';\n  title = 'Email Classified as Non-Order';\n  description = 'The AI classifier determined this email is not a new pre-order. '\n    + 'Reason: ' + (inputData._classificationReason || 'N/A') + '. '\n    + 'Please review the original email below and process manually if needed.';\n} else if (isXlsxPath) {\n  errorType = 'xlsx_parse_failed';\n  title = 'XLSX Parse Failed';\n  description = 'An XLSX attachment was found but could not be parsed into order data. '\n    + 'Either the file is corrupted, password-protected, or in an unexpected format, '\n    + 'or the email does not contain an actual order.';\n} else {\n  errorType = 'no_order_data';\n  title = 'No Order Data Found';\n  description = 'No XLSX attachment was found and no order data could be extracted from the email body.';\n}\n\nconst html = '<div style=\"font-family: Arial, sans-serif; max-width: 600px;\">'\n  + '<h2 style=\"color: #d35400;\">' + title + '</h2>'\n  + '<p>' + description + '</p>'\n  + '<table style=\"border-collapse: collapse; width: 100%; margin: 16px 0;\">'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">From</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + emailMeta.senderEmail + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">Subject</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + emailMeta.emailSubject + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">Received</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + emailMeta.receivedAt + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">Error Type</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + errorType + '</td></tr>'\n  + '</table>'\n  + '<h3>Original Email:</h3>'\n  + '<div style=\"background: #f9f9f9; padding: 12px; border-left: 3px solid #d35400;\">'\n  + originalHtml\n  + '</div>'\n  + '<p style=\"color: #888; margin-top: 16px;\">The email has been moved to the Error folder. Please review manually.</p>'\n  + '</div>';\n\n// Encode attachments into JSON (binary gets dropped by downstream Set/Execute nodes)\nconst binary = $('Fetch Email').first().binary || {};\nconst attachments = [];\nfor (const key of Object.keys(binary)) {\n  const b = binary[key];\n  if (b.data) {\n    attachments.push({\n      '@odata.type': '#microsoft.graph.fileAttachment',\n      name: b.fileName || key,\n      contentType: b.mimeType || 'application/octet-stream',\n      contentBytes: b.data\n    });\n  }\n}\n\n// Build complete sendMail payload\nconst subject = '[Medika Pre-Orders] ' + title + ' - ' + emailMeta.emailSubject;\nconst message = {\n  subject,\n  body: { contentType: 'HTML', content: html },\n  toRecipients: [{ emailAddress: { address: config.notifyEmail } }]\n};\nif (attachments.length > 0) {\n  message.attachments = attachments;\n}\n\nreturn [{\n  json: {\n    sendMailPayload: { message },\n    errorType: errorType,\n    moveToError: true\n  }\n}];\n"
+        "jsCode": "// Build warning/error notification email for admin\n// Includes full original email body and forwards attachments\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\nconst emailBody = $('Fetch Email').first().json.body || {};\nconst originalHtml = emailBody.content || '';\n\n// Detect which error branch\nconst inputData = $input.first().json;\nconst isAiNonOrder = inputData._isValidOrder === false;\n\nlet title, description, errorType;\nif (isAiNonOrder) {\n  errorType = 'not_an_order';\n  title = 'Email klasificiran kao nenarudžba';\n  description = 'AI klasifikator je odredio da ovaj email nije nova prednarudžba. '\n    + 'Razlog: ' + (inputData._classificationReason || 'N/A') + '. '\n    + 'Pregledajte originalni email i po potrebi obradite ručno.';\n} else {\n  errorType = 'no_order_data';\n  title = 'Nisu pronađeni podaci o narudžbi';\n  description = 'Nije pronađen XLSX privitak i nije bilo moguće ekstrahirati podatke o narudžbi iz tijela emaila.';\n}\n\nconst html = '<div style=\"font-family: Arial, sans-serif; max-width: 600px;\">'\n  + '<h2 style=\"color: #d35400;\">' + title + '</h2>'\n  + '<p>' + description + '</p>'\n  + '<table style=\"border-collapse: collapse; width: 100%; margin: 16px 0;\">'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">Od</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + emailMeta.senderEmail + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">Predmet</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + emailMeta.emailSubject + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">Primljeno</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + emailMeta.receivedAt + '</td></tr>'\n  + '<tr><td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">Vrsta greške</td>'\n  + '<td style=\"padding: 8px; border: 1px solid #ddd;\">' + errorType + '</td></tr>'\n  + '</table>'\n  + '<h3>Originalni email:</h3>'\n  + '<div style=\"background: #f9f9f9; padding: 12px; border-left: 3px solid #d35400;\">'\n  + originalHtml\n  + '</div>'\n  + '<p style=\"color: #888; margin-top: 16px;\">Email je premješten u mapu Greške. Pregledajte ručno.</p>'\n  + '</div>';\n\n// Encode attachments into JSON (binary gets dropped by downstream Set/Execute nodes)\nconst binary = $('Fetch Email').first().binary || {};\nconst attachments = [];\nfor (const key of Object.keys(binary)) {\n  const b = binary[key];\n  if (b.data) {\n    attachments.push({\n      '@odata.type': '#microsoft.graph.fileAttachment',\n      name: b.fileName || key,\n      contentType: b.mimeType || 'application/octet-stream',\n      contentBytes: b.data\n    });\n  }\n}\n\n// Build complete sendMail payload\nconst subject = '[Medika] ' + title + ' - ' + emailMeta.emailSubject;\nconst message = {\n  subject,\n  body: { contentType: 'HTML', content: html },\n  toRecipients: (config.notifyEmail || '').split(',').map(e => ({ emailAddress: { address: e.trim() } }))\n};\nif (attachments.length > 0) {\n  message.attachments = attachments;\n}\n\nreturn [{\n  json: {\n    sendMailPayload: { message },\n    errorType: errorType,\n    moveToError: true\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4736,
-        16
+        4288,
+        160
       ],
       "id": "b1000000-0000-4000-8000-000000000305",
       "name": "Build Warning Email"
@@ -552,8 +486,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        4976,
-        16
+        4528,
+        160
       ],
       "id": "b1000000-0000-4000-8000-000000000163",
       "name": "Set Token (Error)"
@@ -570,8 +504,8 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        5232,
-        16
+        4784,
+        160
       ],
       "id": "b1000000-0000-4000-8000-000000000164",
       "name": "WF-00b: Refresh Token (Error)"
@@ -603,12 +537,15 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        5488,
-        16
+        5040,
+        160
       ],
       "id": "b1000000-0000-4000-8000-000000000306",
       "name": "Send Warning Email",
-      "webhookId": "2c2a1db2-19a6-45a4-b752-e5dca40bdb71"
+      "webhookId": "2c2a1db2-19a6-45a4-b752-e5dca40bdb71",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -637,8 +574,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        5728,
-        16
+        5280,
+        160
       ],
       "id": "b1000000-0000-4000-8000-000000000410",
       "name": "Should Move to Error?"
@@ -664,25 +601,28 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        5984,
-        16
+        5536,
+        160
       ],
       "id": "b1000000-0000-4000-8000-000000000072",
       "name": "Move to Error",
-      "webhookId": "fcc63d92-044d-45e8-870d-699d33661036"
+      "webhookId": "fcc63d92-044d-45e8-870d-699d33661036",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
-        "jsCode": "// Consolidate all upstream data for WF-09: Process Order subflow\nconst parseResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\nconst erpToken = $('WF-00b: Get ERP Token').first().json.accessToken;\nconst emailBody = $('Fetch Email').first().json.body || {};\nconst binary = $('Fetch Email').first().binary || {};\n\nreturn [{\n  json: {\n    ...parseResult,\n    emailId: emailMeta.emailId,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    receivedAt: emailMeta.receivedAt,\n    config: config,\n    accessToken: erpToken,\n    emailBody: emailBody,\n    emailBodyHtml: emailBody.content || ''\n  },\n  binary: binary\n}];\n"
+        "jsCode": "// Consolidate data for WF-09 — body parse path (no XLSX)\nconst parseResult = $input.first().json;\nconst emailMeta = $('Extract Email Metadata').first().json;\nconst config = $('Config').first().json;\nconst erpToken = $('WF-00b: Get ERP Token').first().json.accessToken;\nconst emailBody = $('Fetch Email').first().json.body || {};\nconst binary = $('Fetch Email').first().binary || {};\n\nreturn [{\n  json: {\n    ...parseResult,\n    emailId: emailMeta.emailId,\n    senderEmail: emailMeta.senderEmail,\n    emailSubject: emailMeta.emailSubject,\n    receivedAt: emailMeta.receivedAt,\n    config: config,\n    accessToken: erpToken,\n    emailBody: emailBody,\n    emailBodyHtml: emailBody.content || ''\n  },\n  binary: binary\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4448,
-        -336
+        4288,
+        352
       ],
-      "id": "b1000000-0000-4000-8000-000000000400",
-      "name": "Prepare Order Input"
+      "name": "Prepare Order Input (Body)",
+      "id": "c45c5108-df00-4005-bd0f-0947156bec33"
     },
     {
       "parameters": {
@@ -704,11 +644,52 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        4688,
-        -336
+        4528,
+        352
       ],
-      "id": "b1000000-0000-4000-8000-000000000401",
-      "name": "WF-09: Process Order"
+      "name": "WF-09: Process Order (Body)",
+      "id": "5af00c4c-4975-45c4-99d8-7dbde87a3238"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Add ERP token and email body to each XLSX item for WF-01c\nconst erpToken = $('WF-00b: Get ERP Token').first().json.accessToken;\nconst emailBody = $('Fetch Email').first().json.body || {};\n\nconst items = $input.all();\nfor (const item of items) {\n  item.json.accessToken = erpToken;\n  item.json.emailBody = emailBody;\n}\n\nreturn items;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3808,
+        -208
+      ],
+      "name": "Enrich Items",
+      "id": "9151106c-352d-4614-b5ef-beae30d7a052"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "gUTRvGvSrGQcX023"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        4048,
+        -208
+      ],
+      "name": "WF-01c: Process Attachments",
+      "alwaysOutputData": true,
+      "id": "9618582e-4e5b-4837-9565-42cb575177b8",
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -855,7 +836,7 @@
       "main": [
         [
           {
-            "node": "Prepare Parser Input",
+            "node": "Emit One Item Per XLSX",
             "type": "main",
             "index": 0
           }
@@ -869,51 +850,11 @@
         ]
       ]
     },
-    "Prepare Parser Input": {
+    "Emit One Item Per XLSX": {
       "main": [
         [
           {
-            "node": "WF-03: Parse XLSX",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "WF-03: Parse XLSX": {
-      "main": [
-        [
-          {
-            "node": "Parse Succeeded?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Succeeded?": {
-      "main": [
-        [
-          {
-            "node": "Prepare Order Input",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Parse Failed",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Failed": {
-      "main": [
-        [
-          {
-            "node": "Build Warning Email",
+            "node": "Enrich Items",
             "type": "main",
             "index": 0
           }
@@ -946,7 +887,7 @@
       "main": [
         [
           {
-            "node": "Prepare Order Input",
+            "node": "Prepare Order Input (Body)",
             "type": "main",
             "index": 0
           }
@@ -954,6 +895,17 @@
         [
           {
             "node": "Build Warning Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Order Input (Body)": {
+      "main": [
+        [
+          {
+            "node": "WF-09: Process Order (Body)",
             "type": "main",
             "index": 0
           }
@@ -1015,11 +967,11 @@
         ]
       ]
     },
-    "Prepare Order Input": {
+    "Enrich Items": {
       "main": [
         [
           {
-            "node": "WF-09: Process Order",
+            "node": "WF-01c: Process Attachments",
             "type": "main",
             "index": 0
           }

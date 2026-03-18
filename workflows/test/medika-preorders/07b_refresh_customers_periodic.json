@@ -87,7 +87,10 @@
         0
       ],
       "name": "Fetch Customers API",
-      "id": "bfeea282-4ff6-4b97-874d-2d8bcf10b813"
+      "id": "bfeea282-4ff6-4b97-874d-2d8bcf10b813",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {

@@ -105,7 +105,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.orderPayload) }}",
         "options": {
-          "timeout": 30000
+          "timeout": 300000
         }
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -116,7 +116,10 @@
       ],
       "id": "f6000000-0000-4000-8000-000000000003",
       "name": "Submit Order to API",
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 10000
     },
     {
       "parameters": {
