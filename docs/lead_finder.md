@@ -313,7 +313,7 @@ Schedule/Manual Trigger
 - [ ] Seed Regions sheet with Croatia's 21 counties
 - [ ] Sign up for Hunter.io, get API key
 - [ ] Add Hunter credential to n8n
-- [ ] Create project directory: `workflows/test/lead-finder/`
+- [ ] Create project directory: `workflows/lead-finder/test/`
 - [ ] Update .env if needed
 
 ### Phase 2: WF-00 + WF-01 (Business Discovery)

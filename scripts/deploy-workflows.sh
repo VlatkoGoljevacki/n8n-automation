@@ -16,7 +16,7 @@
 #   ./scripts/deploy-workflows.sh $PROJECT promote             # copy + transform files only
 #   ./scripts/deploy-workflows.sh $PROJECT promote --deploy    # copy + transform + deploy
 #
-#   ./scripts/deploy-workflows.sh workflows/test/medika-preorders/01_orchestrator.json  # single file
+#   ./scripts/deploy-workflows.sh workflows/medika-preorders/test/01_orchestrator.json  # single file
 #
 # Requires:
 #   - jq, python3
@@ -113,13 +113,13 @@ FORCE_ACTIVATE=false
 if [ $# -gt 0 ] && [[ "$1" == */* ]] && [[ "$1" == *.json ]]; then
   SINGLE_FILE="$1"
   shift
-  # Extract env and project from path: workflows/{env}/{project}/file.json
+  # Extract project and env from path: workflows/{project}/{env}/file.json
   if [[ "$SINGLE_FILE" =~ workflows/([^/]+)/([^/]+)/ ]]; then
-    ENV="${BASH_REMATCH[1]}"
-    PROJECT="${BASH_REMATCH[2]}"
+    PROJECT="${BASH_REMATCH[1]}"
+    ENV="${BASH_REMATCH[2]}"
   else
-    echo "Error: Cannot determine env/project from path: $SINGLE_FILE"
-    echo "Expected: workflows/{env}/{project}/file.json"
+    echo "Error: Cannot determine project/env from path: $SINGLE_FILE"
+    echo "Expected: workflows/{project}/{env}/file.json"
     exit 1
   fi
 else
@@ -168,7 +168,7 @@ else
   done
 fi
 
-WORKFLOW_DIR="workflows/${ENV}/${PROJECT}"
+WORKFLOW_DIR="workflows/${PROJECT}/${ENV}"
 
 # Check dependencies
 if ! command -v jq &>/dev/null; then
@@ -411,8 +411,8 @@ fi
 
 # ── Promote mode ───────────────────────────────────────────────────
 if [ "$COMMAND" = "promote" ]; then
-  SRC_DIR="workflows/test/${PROJECT}"
-  DST_DIR="workflows/prod/${PROJECT}"
+  SRC_DIR="workflows/${PROJECT}/test"
+  DST_DIR="workflows/${PROJECT}/prod"
 
   if [ ! -d "$SRC_DIR" ]; then
     echo "Error: Source directory not found: $SRC_DIR"

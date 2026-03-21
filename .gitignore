@@ -4,7 +4,8 @@
 .env.workflow.prod
 workflows/**
 !workflows/example_**
-!workflows/test/
-!workflows/test/**
-!workflows/prod/
-!workflows/prod/**
+!workflows/*/
+!workflows/*/test/
+!workflows/*/test/**
+!workflows/*/prod/
+!workflows/*/prod/**

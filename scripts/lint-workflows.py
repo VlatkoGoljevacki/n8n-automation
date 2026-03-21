@@ -9,7 +9,7 @@ Usage:
   ./scripts/lint-workflows.py                          # lint all workflows
   ./scripts/lint-workflows.py medika-preorders         # lint one project (test env)
   ./scripts/lint-workflows.py --env prod               # lint prod workflows
-  ./scripts/lint-workflows.py workflows/test/medika-preorders/01_orchestrator.json  # single file
+  ./scripts/lint-workflows.py workflows/medika-preorders/test/01_orchestrator.json  # single file
 
 Exit codes:
   0 = all checks passed (warnings are OK)
@@ -425,10 +425,10 @@ def resolve_files(args):
         filepath = Path(arg)
         if not filepath.is_absolute():
             filepath = ROOT / filepath
-        # Extract env/project from path
+        # Extract project/env from path: workflows/{project}/{env}/file.json
         match = re.search(r"workflows/([^/]+)/([^/]+)/", str(filepath))
         if match:
-            files.append((str(filepath), match.group(1), match.group(2)))
+            files.append((str(filepath), match.group(2), match.group(1)))
         else:
             files.append((str(filepath), None, None))
         return files
@@ -439,7 +439,7 @@ def resolve_files(args):
     if len(args) > 1 and args[1] == "--env" and len(args) > 2:
         env = args[2]
 
-    project_dir = workflows_dir / env / project
+    project_dir = workflows_dir / project / env
     if project_dir.is_dir():
         for f in sorted(project_dir.glob("*.json")):
             files.append((str(f), env, project))

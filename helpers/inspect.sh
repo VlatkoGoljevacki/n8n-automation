@@ -3,7 +3,7 @@
 # Inspect n8n workflows and nodes on the server.
 #
 # Usage:
-#   ./helpers/inspect.sh list                  # list all medika workflows with status
+#   ./helpers/inspect.sh list [FILTER]          # list all workflows (optionally filter by name)
 #   ./helpers/inspect.sh nodes WORKFLOW_ID     # list all nodes in a workflow
 #   ./helpers/inspect.sh node WORKFLOW_ID NODE # show node parameters
 #   ./helpers/inspect.sh connections WF_ID     # show workflow connection graph
@@ -41,15 +41,19 @@ shift 2>/dev/null || true
 
 case "$CMD" in
   list)
+    FILTER="${1:-}"
     api "workflows?limit=100" | python3 -c "
 import sys, json
+filter_str = sys.argv[1].lower() if len(sys.argv) > 1 and sys.argv[1] else ''
 data = json.load(sys.stdin)
 workflows = sorted(data.get('data', []), key=lambda x: x['name'])
 for w in workflows:
-    if 'medika' in w['name'].lower():
-        active = '● active' if w.get('active') else '○ inactive'
-        print(f'{w[\"id\"]:>20}  {active:12}  {w[\"name\"]}')
-"
+    if filter_str and filter_str not in w['name'].lower():
+        continue
+    active = '\033[32m● active\033[0m' if w.get('active') else '○ inactive'
+    archived = ' [ARCHIVED]' if w.get('isArchived') else ''
+    print(f'{w[\"id\"]:>20}  {active:12}  {w[\"name\"]}{archived}')
+" "$FILTER"
     ;;
 
   nodes)
@@ -136,7 +140,7 @@ print(json.dumps(out, indent=2, ensure_ascii=False))
     echo "Usage: inspect.sh {list|nodes|node|connections|diff} [args...]"
     echo ""
     echo "Commands:"
-    echo "  list                     List all medika workflows with status"
+    echo "  list [FILTER]            List all workflows (optionally filter by name)"
     echo "  nodes WORKFLOW_ID        List all nodes in a workflow"
     echo "  node WORKFLOW_ID NODE    Show node parameters"
     echo "  connections WORKFLOW_ID  Show workflow connection graph"
