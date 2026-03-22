@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const WF_PATH = resolve(ROOT, 'workflows/test/medika-preorders/03_xlsx_parser.json');
+const WF_PATH = resolve(ROOT, 'workflows/medika-preorders/test/03_xlsx_parser.json');
 
 // Load and wrap the Code node's JavaScript so we can call it
 function loadParserCode() {

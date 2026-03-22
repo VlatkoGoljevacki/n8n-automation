@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const WF_PATH = resolve(ROOT, 'workflows/test/medika-preorders/01b_process_email.json');
+const WF_PATH = resolve(ROOT, 'workflows/medika-preorders/test/01b_process_email.json');
 
 function loadClassificationPrompt() {
   const wf = JSON.parse(readFileSync(WF_PATH, 'utf8'));

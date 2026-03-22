@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const WF_PATH = resolve(ROOT, 'workflows/test/medika-preorders/04_article_validator.json');
+const WF_PATH = resolve(ROOT, 'workflows/medika-preorders/test/04_article_validator.json');
 
 function loadValidatorCode() {
   const wf = JSON.parse(readFileSync(WF_PATH, 'utf8'));

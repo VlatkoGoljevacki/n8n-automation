@@ -1,0 +1,594 @@
+{
+  "name": "[lead-finder-test] WF-01: Business Discovery",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        0
+      ],
+      "id": "lf-01-0000-0000-000000000001",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1nVpuwMJbN8jTlNfAP0kSZuu147UyRBEIqgYZEs8QmlA"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "0",
+          "mode": "id"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Scan Status",
+              "lookupValue": "pending"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "lf-01-0000-0000-000000000002",
+      "name": "Read Pending Regions",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "5SbpS5gyKYjz6w4R",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "leftValue": ""
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "lf-01-cond-0000-000000000001",
+              "leftValue": "={{ $json['Region Name'] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "lf-01-0000-0000-000000000003",
+      "name": "Has Regions?"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        672,
+        272
+      ],
+      "id": "lf-01-0000-0000-000000000004",
+      "name": "No Regions to Process"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        672,
+        0
+      ],
+      "id": "lf-01-0000-0000-000000000005",
+      "name": "Loop Regions"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build search queries from niche config + current region\nconst region = $input.first().json;\nconst config = $('Hotels Niche config').first().json;\nconst regionName = region['Region Name'];\nconst country = config.country;\nconst searchTerms = config.searchTerms.split(',').map(s => s.trim());\n\nconst queries = searchTerms.map(term => ({\n  json: {\n    searchTerm: term,\n    query: `${term} in ${regionName}, ${country}`,\n    regionName: regionName,\n    regionType: region['Region Type'],\n    rowNumber: region['row_number']\n  }\n}));\n\nreturn queries;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        0
+      ],
+      "id": "lf-01-0000-0000-000000000006",
+      "name": "Build Search Queries"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1296,
+        0
+      ],
+      "id": "lf-01-0000-0000-000000000007",
+      "name": "Loop Search Terms"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Search Google Places with pagination (max 60 results = 3 pages of 20)\nconst query = $input.first().json.query;\nconst regionName = $input.first().json.regionName;\nconst apiKey = $env.PLACES_API;\nconst fieldMask = 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.types,places.googleMapsUri,nextPageToken';\n\nconst allPlaces = [];\nlet pageToken = null;\nlet page = 0;\n\ndo {\n  const body = { textQuery: query, languageCode: 'en' };\n  if (pageToken) body.pageToken = pageToken;\n\n  const response = await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://places.googleapis.com/v1/places:searchText',\n    headers: {\n      'Content-Type': 'application/json',\n      'X-Goog-Api-Key': apiKey,\n      'X-Goog-FieldMask': fieldMask\n    },\n    body: JSON.stringify(body)\n  });\n\n  const data = typeof response === 'string' ? JSON.parse(response) : response;\n  const places = data.places || [];\n  allPlaces.push(...places);\n\n  pageToken = data.nextPageToken || null;\n  page++;\n\n  // Rate limit between pages\n  if (pageToken) {\n    await new Promise(resolve => setTimeout(resolve, 2000));\n  }\n} while (pageToken && page < 10);\n\nif (allPlaces.length === 0) {\n  return [];\n}\n\nreturn allPlaces.map(p => ({\n  json: {\n    googlePlaceId: p.id || '',\n    name: p.displayName?.text || '',\n    type: (p.types || []).find(t =>\n      ['hotel', 'resort', 'lodging', 'campground', 'hostel'].some(k => t.includes(k))\n    ) || 'lodging',\n    region: regionName,\n    address: p.formattedAddress || '',\n    phone: p.nationalPhoneNumber || '',\n    email: '',\n    website: p.websiteUri || '',\n    rating: p.rating || '',\n    googleMapsUrl: p.googleMapsUri || '',\n    peopleStatus: 'pending',\n    lastUpdated: new Date().toISOString().split('T')[0]\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        0
+      ],
+      "id": "lf-01-0000-0000-000000000008",
+      "name": "Search & Extract Places"
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        0
+      ],
+      "id": "lf-01-0000-0000-000000000010",
+      "name": "Rate Limit Delay",
+      "webhookId": "6b38325a-2b46-4d62-90bf-2704299808ff"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1nVpuwMJbN8jTlNfAP0kSZuu147UyRBEIqgYZEs8QmlA"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "645470148",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Google Place ID": "={{ $json.googlePlaceId }}",
+            "Name": "={{ $json.name }}",
+            "Type": "={{ $json.type }}",
+            "Region": "={{ $json.region }}",
+            "Address": "={{ $json.address }}",
+            "Phone": "={{ $json.phone }}",
+            "Email": "={{ $json.email }}",
+            "Website": "={{ $json.website }}",
+            "Rating": "={{ $json.rating }}",
+            "Google Maps URL": "={{ $json.googleMapsUrl }}",
+            "People Status": "={{ $json.peopleStatus }}",
+            "Last Updated": "={{ $json.lastUpdated }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Google Place ID",
+              "displayName": "Google Place ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Type",
+              "displayName": "Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Region",
+              "displayName": "Region",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Address",
+              "displayName": "Address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Website",
+              "displayName": "Website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Rating",
+              "displayName": "Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Google Maps URL",
+              "displayName": "Google Maps URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "People Status",
+              "displayName": "People Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last Updated",
+              "displayName": "Last Updated",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2016,
+        0
+      ],
+      "id": "lf-01-0000-0000-000000000011",
+      "name": "Append to Businesses",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "5SbpS5gyKYjz6w4R",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// After all search terms processed for this region,\n// collect all results and deduplicate by Google Place ID\nconst allItems = $('Search & Extract Places').all();\n\nconst seen = new Set();\nlet dupes = 0;\nlet unique = 0;\n\nfor (const item of allItems) {\n  const pid = item.json.googlePlaceId;\n  if (pid && seen.has(pid)) {\n    dupes++;\n  } else {\n    seen.add(pid);\n    unique++;\n  }\n}\n\nreturn [{\n  json: {\n    totalFound: allItems.length,\n    unique: unique,\n    duplicates: dupes,\n    regionName: allItems[0]?.json?.region || 'unknown'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1168,
+        -192
+      ],
+      "id": "lf-01-0000-0000-000000000012",
+      "name": "Count Results"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1nVpuwMJbN8jTlNfAP0kSZuu147UyRBEIqgYZEs8QmlA"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "0",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Region Name": "={{ $('Build Search Queries').first().json.regionName }}",
+            "Scan Status": "done",
+            "Last Scanned": "={{ $now.toFormat('yyyy-MM-dd') }}",
+            "Businesses Found": "={{ $json.unique }}"
+          },
+          "matchingColumns": [
+            "Region Name"
+          ],
+          "schema": [
+            {
+              "id": "Region Name",
+              "displayName": "Region Name",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Scan Status",
+              "displayName": "Scan Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last Scanned",
+              "displayName": "Last Scanned",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Businesses Found",
+              "displayName": "Businesses Found",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1392,
+        -192
+      ],
+      "id": "lf-01-0000-0000-000000000013",
+      "name": "Update Region Status",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "5SbpS5gyKYjz6w4R",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3b077c9d-0eb2-403e-8ab3-0fabb9fb7a10",
+              "name": "country",
+              "value": "Croatia",
+              "type": "string"
+            },
+            {
+              "id": "3b077c9d-0eb2-403e-8ab3-0fabb9fb7a11",
+              "name": "searchTerms",
+              "value": "hotel,resort,boutique hotel,aparthotel,spa hotel,camping resort,hostel,pansion,bed and breakfast",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -16,
+        0
+      ],
+      "id": "e6d73ca0-84ef-4395-9b23-d5641c1a5153",
+      "name": "Hotels Niche config"
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Hotels Niche config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Pending Regions": {
+      "main": [
+        [
+          {
+            "node": "Has Regions?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Regions?": {
+      "main": [
+        [
+          {
+            "node": "Loop Regions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Regions to Process",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Regions": {
+      "main": [
+        [
+          {
+            "node": "Count Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Search Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Search Queries": {
+      "main": [
+        [
+          {
+            "node": "Loop Search Terms",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Search Terms": {
+      "main": [
+        [
+          {
+            "node": "Loop Regions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search & Extract Places",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search & Extract Places": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit Delay": {
+      "main": [
+        [
+          {
+            "node": "Append to Businesses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append to Businesses": {
+      "main": [
+        [
+          {
+            "node": "Loop Search Terms",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Results": {
+      "main": [
+        [
+          {
+            "node": "Update Region Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hotels Niche config": {
+      "main": [
+        [
+          {
+            "node": "Read Pending Regions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": []
+}
