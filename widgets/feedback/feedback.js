@@ -288,6 +288,7 @@
       const docH = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
       pin.style.left = (c.x_pct / 100 * docW) + 'px';
       pin.style.top = (c.y_pct / 100 * docH) + 'px';
+      pin.dataset.commentId = c.id;
       pin.addEventListener('click', (e) => {
         e.stopPropagation();
         closeAllPopups();
@@ -396,14 +397,13 @@
         await refreshComments();
         const updated = comments.find(c => String(c.id) === String(comment.id));
         if (updated) {
-          const newPin = pins.find(p =>
-            p.style.left === updated.x_pct + '%' && p.style.top === updated.y_pct + '%'
-          );
+          const newPin = pins.find(p => p.dataset.commentId === String(updated.id));
           if (newPin) showThread(updated, newPin);
         }
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Reply';
       }
-      btn.disabled = false;
-      btn.textContent = 'Reply';
     });
   }
 
