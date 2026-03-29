@@ -47,12 +47,16 @@ Automated pipeline to discover businesses in target verticals (starting with Hot
 
 ### Workflows
 
-| ID | Name | Purpose | Trigger |
-|----|------|---------|---------|
-| WF-00 | Error Handler | Catch errors, send email notifications | Error trigger |
-| WF-01 | Business Discovery | Google Places API → Businesses sheet | Manual + Schedule |
-| WF-02 | People Finder | Search + OpenAI + Hunter → People sheet | Manual + Schedule |
-| WF-03 | Contact Verifier | Hunter verify + cross-reference | Manual + Schedule |
+| ID | Name | Purpose | Trigger | Status |
+|----|------|---------|---------|--------|
+| WF-00 | Error Handler | Catch errors, send email notifications | Error trigger | Done |
+| WF-01 | Business Discovery | Google Places API → Businesses tab | Manual + Schedule | Done |
+| WF-02 | People Finder | Orchestrator: calls search sub-workflows, extracts contacts | Manual + Schedule | Building |
+| WF-02a | SerpApi Search | Google search via SerpApi → raw results | Sub-workflow | Future (needs signup) |
+| WF-02b | Serper Search | Google search via Serper → raw results | Sub-workflow | Building |
+| WF-02c | Hunter Search | Domain email discovery via Hunter.io → raw results | Sub-workflow | Future (needs signup) |
+| WF-02d | OpenAI Search | Bing search via OpenAI web search → raw results | Sub-workflow | Building |
+| WF-03 | Contact Verifier | Hunter verify + cross-reference | Manual + Schedule | Future |
 
 ---
 
@@ -211,33 +215,98 @@ English + Croatian localized terms:
 
 **Niche config** can live as a JSON array in a Set node or workflow variable, making it easy to swap verticals later.
 
-### WF-02: People Finder
+### WF-02: People Finder (Orchestrator)
 
-**Input:** Businesses where People Status = "pending"
-**Output:** Rows written to People sheet
+**Input:** Businesses where People Status = "pending" (configurable batch size, default 20)
+**Output:** Rows written to People tab
+**Schedule:** Daily morning run, processes N businesses per run
 
 ```
 Schedule/Manual Trigger
-  → Read Businesses sheet (filter: People Status = pending)
-  → Batch with 20-second delays
-  → For each business:
-      → Mark: People Status = processing
-      → Step 1: Hunter.io Domain Search
-        - Extract domain from website URL
-        - Find all emails + names + positions at that domain
-      → Step 2: Serper web search
-        - "{Business Name} owner CEO founder director vlasnik direktor"
-        - "{Business Name} {website domain} management team leadership"
-      → Step 3: OpenAI (gpt-4.1-mini) analysis
-        - Input: Hunter results + search results
-        - Task: Extract structured contacts, prioritize leadership
-        - Priority: CEO > Founder > Owner > Managing Director > GM
-        - Output: JSON array of contacts
-      → Write to People sheet
-      → Mark: People Status = done
+  → People Finder Config (batchSize: 20)
+  → Read Businesses tab (filter: People Status = pending, limit to batchSize)
+  → Has Businesses?
+  → Loop Businesses (flat, one at a time)
+    → Call WF-02a: SerpApi Search (returns raw results)      [FUTURE - needs signup]
+    → Call WF-02b: Serper Search (returns raw results)
+    → Call WF-02c: Hunter Search (returns raw results)       [FUTURE - needs signup]
+    → Call WF-02d: OpenAI Search (returns raw results)
+    → Combine Results (merge raw results from all sources)
+    → OpenAI Extract Contacts (gpt-4.1-mini: structured extraction)
+    → Append to People tab
+    → Mark business People Status = done
+    → Rate Limit Delay (20s between businesses)
+    → Loop Businesses
+  → Done
 ```
 
-**OpenAI System Prompt (draft):**
+Sub-workflows are called sequentially. Each returns raw search results as JSON.
+The orchestrator combines all raw results and feeds them to OpenAI for final extraction.
+Sub-workflows that aren't ready yet (SerpApi, Hunter) are skipped — the orchestrator
+handles missing results gracefully.
+
+### WF-02a: SerpApi Search (FUTURE)
+
+**Status:** Blocked — needs SerpApi signup
+**Input:** businessName, website, region (via Execute Workflow Trigger)
+**Output:** Raw search result snippets
+
+```
+Execute Workflow Trigger (passthrough)
+  → Build search queries:
+    - "{businessName} owner CEO founder director vlasnik direktor"
+    - "{businessName} {domain} management team leadership"
+    - "site:{domain} about team contact"
+  → SerpApi HTTP Request (Google Search)
+  → Return raw snippets as JSON
+```
+
+### WF-02b: Serper Search
+
+**Input:** businessName, website, region (via Execute Workflow Trigger)
+**Output:** Raw search result snippets
+
+```
+Execute Workflow Trigger (passthrough)
+  → Build search queries:
+    - "{businessName} owner CEO founder director vlasnik direktor"
+    - "{businessName} {domain} management team leadership"
+    - "{businessName} LinkedIn"
+  → Serper HTTP Request (POST https://google.serper.dev/search)
+  → Return combined snippets as JSON
+```
+
+### WF-02c: Hunter Domain Search (FUTURE)
+
+**Status:** Blocked — needs Hunter.io signup
+**Input:** website domain (via Execute Workflow Trigger)
+**Output:** Emails, names, positions found at domain
+
+```
+Execute Workflow Trigger (passthrough)
+  → Extract domain from website URL
+  → Hunter Domain Search (built-in node)
+  → Return emails/names/positions as JSON
+```
+
+### WF-02d: OpenAI Web Search
+
+**Input:** businessName, website, region (via Execute Workflow Trigger)
+**Output:** Raw search results from Bing via OpenAI
+
+```
+Execute Workflow Trigger (passthrough)
+  → OpenAI Chat (gpt-4.1-mini with web search tool enabled)
+    - "Find the owners, founders, CEO, directors of {businessName} ({website}).
+       Return their names, titles, emails, phone numbers, and social media profiles."
+  → Return raw response as JSON
+```
+
+### OpenAI Contact Extraction (in orchestrator)
+
+After all sub-workflow results are combined, a single OpenAI call extracts structured contacts.
+
+**System Prompt:**
 ```
 You are a business intelligence analyst. Given search results and email data
 about a hotel/hospitality business, extract the senior leadership contacts.
@@ -324,10 +393,14 @@ Schedule/Manual Trigger
 - [ ] Run full Croatia scan
 
 ### Phase 3: WF-02 (People Finder)
-- [ ] WF-02: Hunter + Serper + OpenAI pipeline
-- [ ] Test with 10-20 businesses
-- [ ] Tune OpenAI prompt based on result quality
-- [ ] Run for all businesses
+- [ ] WF-02b: Serper Search sub-workflow
+- [ ] WF-02d: OpenAI Search sub-workflow
+- [ ] WF-02: People Finder orchestrator (calls sub-workflows, combines, extracts)
+- [ ] Test with 5-10 businesses
+- [ ] Tune OpenAI extraction prompt based on result quality
+- [ ] Run for all businesses (daily batches of 20)
+- [ ] WF-02a: SerpApi Search sub-workflow (after signup)
+- [ ] WF-02c: Hunter Search sub-workflow (after signup)
 
 ### Phase 4: WF-03 (Contact Verification)
 - [ ] WF-03: Hunter email verification

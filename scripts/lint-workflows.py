@@ -451,7 +451,7 @@ def get_project_files(filepath, env, project):
     """Get all workflow files in the same project directory."""
     if env is None or project is None:
         return [filepath]
-    project_dir = ROOT / "workflows" / env / project
+    project_dir = ROOT / "workflows" / project / env
     return [str(f) for f in sorted(project_dir.glob("*.json"))]
 
 

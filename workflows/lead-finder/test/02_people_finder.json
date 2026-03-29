@@ -1,0 +1,679 @@
+{
+  "name": "[lead-finder-test] WF-02: People Finder",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        0
+      ],
+      "id": "lf-02-0000-0000-000000000001",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "lf-02-cfg-0000-000000000001",
+              "name": "batchSize",
+              "value": 1,
+              "type": "number"
+            },
+            {
+              "id": "lf-02-cfg-0000-000000000002",
+              "name": "country",
+              "value": "Croatia",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -16,
+        0
+      ],
+      "id": "lf-02-0000-0000-000000000002",
+      "name": "People Finder Config"
+    },
+    {
+      "parameters": {
+        "maxItems": "={{ $('People Finder Config').first().json.batchSize }}"
+      },
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        448,
+        0
+      ],
+      "id": "lf-02-0000-0000-000000000004",
+      "name": "Limit to Batch Size"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1nVpuwMJbN8jTlNfAP0kSZuu147UyRBEIqgYZEs8QmlA"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "645470148",
+          "mode": "id"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "People Status",
+              "lookupValue": "pending"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "lf-02-0000-0000-000000000003",
+      "name": "Read Pending Businesses",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "5SbpS5gyKYjz6w4R",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "leftValue": ""
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "lf-02-cond-0000-000000000001",
+              "leftValue": "={{ $json['Name'] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        672,
+        0
+      ],
+      "id": "lf-02-0000-0000-000000000005",
+      "name": "Has Businesses?"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        896,
+        272
+      ],
+      "id": "lf-02-0000-0000-000000000006",
+      "name": "No Businesses to Process"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare standard input for sub-workflows\n// Each business becomes a standardized search request\nconst businesses = $input.all();\nconst config = $('People Finder Config').first().json;\n\nreturn businesses.map(biz => ({\n  json: {\n    businessName: biz.json['Name'],\n    website: biz.json['Website'] || '',\n    region: biz.json['Region'] || '',\n    country: config.country,\n    phone: biz.json['Phone'] || '',\n    address: biz.json['Address'] || '',\n    googlePlaceId: biz.json['Google Place ID'] || '',\n    row_number: biz.json['row_number']\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ],
+      "id": "lf-02-0000-0000-000000000007",
+      "name": "Prepare Search Input"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "lf-02-0000-0000-000000000008",
+      "name": "Loop Businesses"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "rp0SYkWZHjL7j7wP"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "lf-02-0000-0000-000000000009",
+      "name": "WF-02b: Serper Search",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "3cEKi4TgD2I57Vwi"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "lf-02-0000-0000-000000000010",
+      "name": "WF-02d: OpenAI Search",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine results from all search sub-workflows\n// Each sub-workflow returns { results: [...] }\n// Gracefully handle missing/failed sub-workflows\nconst businessInput = $('Loop Businesses').item.json;\nconst allResults = [];\n\n// Collect from Serper\ntry {\n  const serper = $('WF-02b: Serper Search').first().json;\n  if (serper.results) allResults.push(...serper.results);\n} catch(e) { /* sub-workflow not available or failed */ }\n\n// Collect from OpenAI\ntry {\n  const openai = $('WF-02d: OpenAI Search').first().json;\n  if (openai.results) allResults.push(...openai.results);\n} catch(e) { /* sub-workflow not available or failed */ }\n\n// Future: add SerpApi and Hunter search results here\n\nreturn [{\n  json: {\n    businessName: businessInput.businessName,\n    website: businessInput.website,\n    region: businessInput.region,\n    country: businessInput.country,\n    row_number: businessInput.row_number,\n    searchResults: allResults,\n    resultCount: allResults.length\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        0
+      ],
+      "id": "lf-02-0000-0000-000000000011",
+      "name": "Combine Results"
+    },
+    {
+      "parameters": {
+        "resource": "chat"
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        2016,
+        0
+      ],
+      "id": "lf-02-0000-0000-000000000012",
+      "name": "Extract Contacts",
+      "credentials": {
+        "openAiApi": {
+          "id": "eD10IPhcxdI4yu0p",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse OpenAI response into individual contact items for sheet append\nconst input = $input.first().json;\nconst combinedData = $('Combine Results').first().json;\nconst businessName = combinedData.businessName;\n\n// Extract the text response from OpenAI\nconst responseText = input.output?.[0]?.content?.[0]?.text || input.message?.content || JSON.stringify(input);\n\n// Parse JSON from response (handle markdown fences)\nlet contacts = [];\ntry {\n  let jsonStr = responseText;\n  // Strip markdown code fences\n  const fenceMatch = jsonStr.match(/```(?:json)?\\s*([\\s\\S]*?)```/);\n  if (fenceMatch) jsonStr = fenceMatch[1];\n  jsonStr = jsonStr.trim();\n  \n  const parsed = JSON.parse(jsonStr);\n  contacts = Array.isArray(parsed) ? parsed : [parsed];\n} catch(e) {\n  // If parsing fails, return empty\n  return [];\n}\n\nif (contacts.length === 0) return [];\n\nreturn contacts.map(c => ({\n  json: {\n    businessName: businessName,\n    name: c.name || '',\n    title: c.title || '',\n    email: c.email || '',\n    phone: c.phone || '',\n    linkedin: c.linkedin || '',\n    facebook: c.facebook || '',\n    instagram: c.instagram || '',\n    twitter: c.twitter || '',\n    source: 'serper+openai',\n    verified: 'pending',\n    verificationDate: '',\n    lastUpdated: new Date().toISOString().split('T')[0]\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        0
+      ],
+      "id": "lf-02-0000-0000-000000000013",
+      "name": "Parse Contacts"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1nVpuwMJbN8jTlNfAP0kSZuu147UyRBEIqgYZEs8QmlA"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "19325039",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Business Name": "={{ $json.businessName }}",
+            "Name": "={{ $json.name }}",
+            "Title": "={{ $json.title }}",
+            "Email": "={{ $json.email }}",
+            "Phone": "={{ $json.phone }}",
+            "LinkedIn": "={{ $json.linkedin }}",
+            "Facebook": "={{ $json.facebook }}",
+            "Instagram": "={{ $json.instagram }}",
+            "Twitter": "={{ $json.twitter }}",
+            "Source": "={{ $json.source }}",
+            "Verified": "={{ $json.verified }}",
+            "Verification Date": "={{ $json.verificationDate }}",
+            "Last Updated": "={{ $json.lastUpdated }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Business Name",
+              "displayName": "Business Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Title",
+              "displayName": "Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "LinkedIn",
+              "displayName": "LinkedIn",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Facebook",
+              "displayName": "Facebook",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Instagram",
+              "displayName": "Instagram",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Twitter",
+              "displayName": "Twitter",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Verified",
+              "displayName": "Verified",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Verification Date",
+              "displayName": "Verification Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last Updated",
+              "displayName": "Last Updated",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2464,
+        0
+      ],
+      "id": "lf-02-0000-0000-000000000014",
+      "name": "Append to People",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "5SbpS5gyKYjz6w4R",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1nVpuwMJbN8jTlNfAP0kSZuu147UyRBEIqgYZEs8QmlA"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "645470148",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $('Combine Results').first().json.businessName }}",
+            "People Status": "done",
+            "Last Updated": "={{ $now.toFormat('yyyy-MM-dd') }}"
+          },
+          "matchingColumns": [
+            "Name"
+          ],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "People Status",
+              "displayName": "People Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last Updated",
+              "displayName": "Last Updated",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2688,
+        0
+      ],
+      "id": "lf-02-0000-0000-000000000015",
+      "name": "Mark Business Done",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "5SbpS5gyKYjz6w4R",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 20
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2912,
+        0
+      ],
+      "id": "lf-02-0000-0000-000000000016",
+      "name": "Rate Limit Delay",
+      "webhookId": "253e177f-c1c1-407e-9637-30ba4d6bfa95"
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "People Finder Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "People Finder Config": {
+      "main": [
+        [
+          {
+            "node": "Read Pending Businesses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Pending Businesses": {
+      "main": [
+        [
+          {
+            "node": "Limit to Batch Size",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit to Batch Size": {
+      "main": [
+        [
+          {
+            "node": "Has Businesses?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Businesses?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Search Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Businesses to Process",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Search Input": {
+      "main": [
+        [
+          {
+            "node": "Loop Businesses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Businesses": {
+      "main": [
+        [],
+        [
+          {
+            "node": "WF-02d: OpenAI Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WF-02d: OpenAI Search": {
+      "main": [
+        [
+          {
+            "node": "Combine Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Results": {
+      "main": [
+        [
+          {
+            "node": "Extract Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Contacts": {
+      "main": [
+        [
+          {
+            "node": "Parse Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Contacts": {
+      "main": [
+        [
+          {
+            "node": "Append to People",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append to People": {
+      "main": [
+        [
+          {
+            "node": "Mark Business Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Business Done": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit Delay": {
+      "main": [
+        [
+          {
+            "node": "Loop Businesses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": []
+}

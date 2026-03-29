@@ -1,0 +1,75 @@
+{
+  "name": "[lead-finder-test] WF-02b: Serper Search",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "lf-02b-000-0000-000000000001",
+      "name": "Execute Workflow Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build Serper search queries for finding business leadership\nconst input = $input.first().json;\nconst name = input.businessName;\nconst website = input.website || '';\nconst domain = website ? new URL(website).hostname.replace('www.', '') : '';\n\nconst queries = [\n  `${name} owner CEO founder director vlasnik direktor`,\n  `${name} ${domain} management team leadership`,\n  `${name} LinkedIn`\n];\n\n// If we have a domain, also search the site directly\nif (domain) {\n  queries.push(`site:${domain} about team management contact`);\n}\n\nreturn queries.map(q => ({ json: { query: q, businessName: name } }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "lf-02b-000-0000-000000000002",
+      "name": "Build Search Queries"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Run all Serper queries and collect results\nconst queries = $input.all();\nconst apiKey = $env.SERPER_API_KEY;\nconst allResults = [];\n\nfor (const item of queries) {\n  const query = item.json.query;\n\n  try {\n    const response = await this.helpers.httpRequest({\n      method: 'POST',\n      url: 'https://google.serper.dev/search',\n      headers: {\n        'Content-Type': 'application/json',\n        'X-API-KEY': apiKey\n      },\n      body: JSON.stringify({ q: query, num: 10 })\n    });\n\n    const data = typeof response === 'string' ? JSON.parse(response) : response;\n    const organic = data.organic || [];\n\n    for (const result of organic) {\n      allResults.push({\n        source: 'serper',\n        title: result.title || '',\n        snippet: result.snippet || '',\n        url: result.link || '',\n        query: query\n      });\n    }\n\n    // Include knowledge graph if present\n    if (data.knowledgeGraph) {\n      const kg = data.knowledgeGraph;\n      allResults.push({\n        source: 'serper',\n        title: kg.title || '',\n        snippet: JSON.stringify({\n          description: kg.description || '',\n          attributes: kg.attributes || {},\n          website: kg.website || '',\n          phone: kg.phone || ''\n        }),\n        url: kg.website || '',\n        query: query\n      });\n    }\n  } catch (e) {\n    // Skip failed queries, don't block other results\n  }\n\n  // Brief delay between queries\n  await new Promise(resolve => setTimeout(resolve, 1000));\n}\n\nreturn [{ json: { results: allResults } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "id": "lf-02b-000-0000-000000000003",
+      "name": "Search & Collect"
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Search Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Search Queries": {
+      "main": [
+        [
+          {
+            "node": "Search & Collect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": []
+}

@@ -70,6 +70,48 @@
           "type": "string"
         }
       ]
+    },
+    {
+      "id": "qtv5AvJ1NJV7zA7H",
+      "name": "wireframe_comments",
+      "columns": [
+        {
+          "name": "project",
+          "type": "string"
+        },
+        {
+          "name": "page",
+          "type": "string"
+        },
+        {
+          "name": "x_pct",
+          "type": "number"
+        },
+        {
+          "name": "y_pct",
+          "type": "number"
+        },
+        {
+          "name": "comment",
+          "type": "string"
+        },
+        {
+          "name": "author",
+          "type": "string"
+        },
+        {
+          "name": "parent_id",
+          "type": "number"
+        },
+        {
+          "name": "resolved",
+          "type": "boolean"
+        },
+        {
+          "name": "created_at",
+          "type": "string"
+        }
+      ]
     }
   ]
 }

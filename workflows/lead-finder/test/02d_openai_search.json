@@ -1,0 +1,93 @@
+{
+  "name": "[lead-finder-test] WF-02d: OpenAI Search",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "lf-02d-000-0000-000000000001",
+      "name": "Execute Workflow Trigger"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5.4-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-5.4-MINI"
+        },
+        "responses": {
+          "values": [
+            {}
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        0
+      ],
+      "id": "lf-02d-000-0000-000000000002",
+      "name": "OpenAI Web Search",
+      "credentials": {
+        "openAiApi": {
+          "id": "eD10IPhcxdI4yu0p",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Package OpenAI response as standardized raw results\nconst input = $input.first().json;\n\n// The OpenAI response text contains the findings\nconst responseText = input.output?.[0]?.content?.[0]?.text || input.message?.content || JSON.stringify(input);\n\nreturn [{\n  json: {\n    results: [{\n      source: 'openai_web_search',\n      title: 'OpenAI Web Search Results',\n      snippet: responseText,\n      url: '',\n      query: 'OpenAI web search for business leadership'\n    }]\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        0
+      ],
+      "id": "lf-02d-000-0000-000000000003",
+      "name": "Format Output"
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Web Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Web Search": {
+      "main": [
+        [
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": []
+}

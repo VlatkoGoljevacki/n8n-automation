@@ -1,0 +1,229 @@
+{
+  "name": "[wireframe-comments-test] WF-03: DELETE Comment",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "DELETE",
+        "path": "test-comments",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "wc-03-0000-0000-000000000001",
+      "name": "Webhook",
+      "webhookId": "wc-03-webhook-delete",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "IfZ199KSAKOn5Cec",
+          "name": "Feedback Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "qtv5AvJ1NJV7zA7H",
+          "mode": "id"
+        },
+        "limit": 500
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "wc-03-0000-0000-000000000002",
+      "name": "Get All Comments",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const deleteId = parseInt($('Webhook').first().json.query.id);\nconst items = $input.all().filter(item => item.json.id !== undefined);\n\nconst hasChildren = items.some(item => item.json.parent_id === deleteId);\n\nreturn [{json: {hasChildren, id: deleteId}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "wc-03-0000-0000-000000000003",
+      "name": "Check Children"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "wc-03-cond-has-children",
+              "leftValue": "={{ $json.hasChildren }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        672,
+        0
+      ],
+      "id": "wc-03-0000-0000-000000000004",
+      "name": "Has Children?"
+    },
+    {
+      "parameters": {
+        "operation": "deleteRows",
+        "dataTableId": {
+          "__rl": true,
+          "value": "qtv5AvJ1NJV7zA7H",
+          "mode": "id"
+        },
+        "deleteType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        -96
+      ],
+      "id": "wc-03-0000-0000-000000000005",
+      "name": "Delete Comment",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"deleted\":true}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1104,
+        -96
+      ],
+      "id": "wc-03-0000-0000-000000000006",
+      "name": "Respond OK"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {error: 'Cannot delete comment with replies'} }}",
+        "options": {
+          "responseCode": 409
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        112
+      ],
+      "id": "wc-03-0000-0000-000000000007",
+      "name": "Respond Conflict"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get All Comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Comments": {
+      "main": [
+        [
+          {
+            "node": "Check Children",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Children": {
+      "main": [
+        [
+          {
+            "node": "Has Children?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Children?": {
+      "main": [
+        [
+          {
+            "node": "Delete Comment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Conflict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Comment": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": []
+}

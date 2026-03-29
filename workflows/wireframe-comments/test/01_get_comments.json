@@ -1,0 +1,119 @@
+{
+  "name": "[wireframe-comments-test] WF-01: GET Comments",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "path": "test-comments",
+        "httpMethod": "GET",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "wc-01-0000-0000-000000000001",
+      "name": "Webhook",
+      "webhookId": "wc-01-webhook-get",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "IfZ199KSAKOn5Cec",
+          "name": "Feedback Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "qtv5AvJ1NJV7zA7H",
+          "mode": "id"
+        },
+        "limit": 500
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        0
+      ],
+      "id": "wc-01-0000-0000-000000000002",
+      "name": "Get All Comments",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const query = $('Webhook').first().json.query;\nconst project = query.project;\nconst page = query.page;\nconst items = $input.all().filter(item => item.json.id !== undefined);\n\nconst filtered = items\n  .filter(item => !project || item.json.project === project)\n  .filter(item => !page || item.json.page === page);\n\nreturn [{json: {comments: filtered.map(item => item.json)}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "wc-01-0000-0000-000000000003",
+      "name": "Filter by Page"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.comments }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        0
+      ],
+      "id": "wc-01-0000-0000-000000000004",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get All Comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Comments": {
+      "main": [
+        [
+          {
+            "node": "Filter by Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter by Page": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": []
+}
